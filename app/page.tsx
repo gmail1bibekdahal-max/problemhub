@@ -1367,6 +1367,8 @@ export default function Page() {
             }
           })
           setProblems(mappedPosts)
+        } else if (!postsErr && postsData && postsData.length === 0) {
+          setProblems([])
         }
       } catch (err) {
         console.warn('Supabase initialization handled in dynamic mode:', err)
