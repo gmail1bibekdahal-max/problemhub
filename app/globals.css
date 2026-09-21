@@ -642,8 +642,7 @@ button { cursor: pointer; }
 
 .looking {
   gap: 8px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--fb-divider);
+  padding-bottom: 4px;
   color: var(--fb-text-secondary);
   font-size: 13px;
 }
