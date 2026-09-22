@@ -22,8 +22,6 @@ import {
   LogOut,
   Zap,
   ThumbsUp,
-  Smile,
-  Image as ImageIcon,
   MoreHorizontal,
   ChevronDown,
   Globe,
@@ -66,7 +64,19 @@ type SponsoredProduct = {
   className: string
   mark: string
   url?: string
+  logoUrl?: string
 }
+
+const DEFAULT_PRODUCTS: SponsoredProduct[] = [
+  {
+    name: 'Sorget',
+    description: 'A marketing attribution platform for B2B teams.',
+    className: 'product-sorget',
+    mark: 'S',
+    url: 'https://sorget.site',
+    logoUrl: '/sorget-logo.png',
+  },
+]
 
 type Problem = {
   id: string
@@ -95,51 +105,7 @@ type Problem = {
   userVotedSolution?: boolean
 }
 
-function getClientVoterId(): string {
-  if (typeof window === 'undefined') return 'guest_default'
-  try {
-    let id = localStorage.getItem('problemhub_voter_id')
-    if (!id) {
-      id = `voter_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
-      localStorage.setItem('problemhub_voter_id', id)
-    }
-    return id
-  } catch {
-    return 'guest_default'
-  }
-}
 
-function getLocalReactions(): Record<string, boolean> {
-  if (typeof window === 'undefined') return {}
-  try {
-    const raw = localStorage.getItem('problemhub_local_reactions')
-    return raw ? JSON.parse(raw) : {}
-  } catch {
-    return {}
-  }
-}
-
-function setLocalReaction(problemId: string, type: 'problem' | 'solution', active: boolean) {
-  if (typeof window === 'undefined') return
-  try {
-    const pKey = `${problemId}:problem`
-    const sKey = `${problemId}:solution`
-    const current = getLocalReactions()
-    if (active) {
-      if (type === 'problem') {
-        current[pKey] = true
-        delete current[sKey]
-      } else {
-        current[sKey] = true
-        delete current[pKey]
-      }
-    } else {
-      delete current[pKey]
-      delete current[sKey]
-    }
-    localStorage.setItem('problemhub_local_reactions', JSON.stringify(current))
-  } catch {}
-}
 
 const reflectionPrompts = [
   'What\'s frustrating you?',
@@ -153,6 +119,11 @@ const reflectionPrompts = [
 function Logo({ onRefresh }: { onRefresh?: () => void }) {
   function handleClick(e: React.MouseEvent) {
     e.preventDefault()
+    const feedEl = document.querySelector('.feed') as HTMLElement | null
+    if (feedEl) {
+      feedEl.scrollTo({ top: 0, left: 0, behavior: 'smooth' })
+    }
+    window.scrollTo({ top: 0, left: 0, behavior: 'smooth' })
     if (onRefresh) {
       onRefresh()
     }
@@ -196,7 +167,9 @@ function ProblemCard({
   onAddComment,
   onToggleLikeComment,
   onToggleReaction,
+  onRequireAuth,
   user,
+  isHighlighted,
 }: {
   problem: Problem
   onToggleSave: (id: string) => void
@@ -204,7 +177,9 @@ function ProblemCard({
   onAddComment: (id: string, text: string, parentId?: string | null) => void
   onToggleLikeComment: (problemId: string, commentId: string) => void
   onToggleReaction: (problemId: string, type: 'problem' | 'solution') => void
+  onRequireAuth: (intent: 'comment' | 'reaction' | 'save') => void
   user: { id: string; email?: string | null } | null
+  isHighlighted?: boolean
 }) {
   const [showComments, setShowComments] = useState(false)
   const [commentDraft, setCommentDraft] = useState('')
@@ -256,10 +231,6 @@ function ProblemCard({
     setCommentDraft((prev) => (prev.startsWith(`@${username} `) ? prev : `@${username} `))
   }
 
-  function appendEmoji(emoji: string) {
-    setCommentDraft((prev) => `${prev} ${emoji}`.trim())
-  }
-
   const [isExpanded, setIsExpanded] = useState(false)
   const [hasOverflow, setHasOverflow] = useState(false)
   const copyRef = useRef<HTMLDivElement>(null)
@@ -282,7 +253,11 @@ function ProblemCard({
   }, [problem.paragraphs, problem.title, isExpanded])
 
   return (
-    <article className="problem-card" id={`problem-${problem.id}`}>
+    <article
+      className={`problem-card ${isHighlighted ? 'highlighted-post' : ''}`}
+      id={`problem-${problem.id}`}
+      data-post-id={problem.id}
+    >
       <div className="problem-header">
         <div className="user-row">
           <Avatar problem={problem} />
@@ -295,7 +270,15 @@ function ProblemCard({
           {isMyPost && <span className="user-badge my-post-badge">Your Post</span>}
           {!isMyPost && isMyReply && <span className="user-badge my-reply-badge">You Replied</span>}
           <span className={`category ${problem.categoryClass}`}>{problem.category}</span>
-          <button className="more" aria-label="More options" type="button">•••</button>
+          <button
+            className="more"
+            aria-label="Share post options"
+            type="button"
+            onClick={() => onShare(problem)}
+            title="Share this post"
+          >
+            •••
+          </button>
         </div>
       </div>
       <h2
@@ -401,7 +384,13 @@ function ProblemCard({
             <button
               type="button"
               className={`reaction-button reaction-problem ${problem.userVotedProblem ? 'active' : ''}`}
-              onClick={() => onToggleReaction(problem.id, 'problem')}
+              onClick={() => {
+                if (!user) {
+                  onRequireAuth('reaction')
+                  return
+                }
+                onToggleReaction(problem.id, 'problem')
+              }}
               title={problem.userVotedProblem ? 'You flagged this problem (Click to undo)' : 'I have this problem too'}
               aria-label="I have this problem too"
               aria-pressed={problem.userVotedProblem}
@@ -414,7 +403,13 @@ function ProblemCard({
             <button
               type="button"
               className={`reaction-button reaction-solution ${problem.userVotedSolution ? 'active' : ''}`}
-              onClick={() => onToggleReaction(problem.id, 'solution')}
+              onClick={() => {
+                if (!user) {
+                  onRequireAuth('reaction')
+                  return
+                }
+                onToggleReaction(problem.id, 'solution')
+              }}
               title={problem.userVotedSolution ? 'You offered a solution (Click to undo)' : 'I have / propose a solution'}
               aria-label="I have or build a solution"
               aria-pressed={problem.userVotedSolution}
@@ -429,7 +424,13 @@ function ProblemCard({
             <ActionButton onClick={() => setShowComments((prev) => !prev)}>
               <MessageCircle /> <span>{totalCommentsCount} {totalCommentsCount === 1 ? 'comment' : 'comments'}</span>
             </ActionButton>
-            <ActionButton onClick={() => onToggleSave(problem.id)}>
+            <ActionButton onClick={() => {
+              if (!user) {
+                onRequireAuth('save')
+                return
+              }
+              onToggleSave(problem.id)
+            }}>
               <Bookmark fill={problem.saved ? 'currentColor' : 'none'} /> <span>{problem.saved ? 'Saved' : 'Save'}</span>
             </ActionButton>
             <ActionButton onClick={() => onShare(problem)}>
@@ -442,48 +443,68 @@ function ProblemCard({
       {showComments && (
         <div className="linkedin-comments-panel">
           {/* 1. LinkedIn Top Compose Box */}
-          <form className="linkedin-compose-box" onSubmit={handleCommentSubmit}>
-            {replyingTo && (
-              <div className="linkedin-replying-badge">
-                <span>Replying to <strong>@{replyingTo.user}</strong></span>
-                <button
-                  type="button"
-                  className="replying-cancel-btn"
-                  onClick={() => setReplyingTo(null)}
-                  title="Cancel reply"
-                >
-                  <X />
-                </button>
+          {!user ? (
+            <div
+              className="comments-auth-prompt"
+              onClick={() => onRequireAuth('comment')}
+              role="button"
+              tabIndex={0}
+              title="Sign in to comment or reply"
+            >
+              <div className="comments-auth-icon">
+                <MessageCircle />
               </div>
-            )}
-            <div className="linkedin-input-row">
-              <div className="linkedin-compose-avatar">
-                {(user?.email?.[0] || 'U').toUpperCase()}
+              <div className="comments-auth-text">
+                <span>Sign in with <strong>Google</strong> or <strong>Email</strong> to join the discussion and post a comment</span>
               </div>
-              <div className="linkedin-input-pill">
-                <input
-                  type="text"
-                  placeholder={replyingTo ? `Add a reply to @${replyingTo.user}...` : "Add a comment..."}
-                  value={commentDraft}
-                  onChange={(e) => setCommentDraft(e.target.value)}
-                />
-                <div className="linkedin-input-tools">
-                  <button type="button" className="linkedin-tool-btn" onClick={() => appendEmoji('😊')} title="Add emoji">
-                    <Smile />
+              <button
+                type="button"
+                className="comments-auth-btn"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onRequireAuth('comment')
+                }}
+              >
+                Sign In
+              </button>
+            </div>
+          ) : (
+            <form className="linkedin-compose-box" onSubmit={handleCommentSubmit}>
+              {replyingTo && (
+                <div className="linkedin-replying-badge">
+                  <span>Replying to <strong>@{replyingTo.user}</strong></span>
+                  <button
+                    type="button"
+                    className="replying-cancel-btn"
+                    onClick={() => setReplyingTo(null)}
+                    title="Cancel reply"
+                  >
+                    <X />
                   </button>
-                  <span className="linkedin-gif-btn" onClick={() => appendEmoji('🚀')}>GIF</span>
-                  <button type="button" className="linkedin-tool-btn" title="Add media">
-                    <ImageIcon />
-                  </button>
-                  {commentDraft.trim() && (
-                    <button type="submit" className="linkedin-post-btn">
-                      Post
-                    </button>
-                  )}
+                </div>
+              )}
+              <div className="linkedin-input-row">
+                <div className="linkedin-compose-avatar">
+                  {(user?.email?.[0] || 'U').toUpperCase()}
+                </div>
+                <div className="linkedin-input-pill">
+                  <input
+                    type="text"
+                    placeholder={replyingTo ? `Add a reply to @${replyingTo.user}...` : "Add a comment..."}
+                    value={commentDraft}
+                    onChange={(e) => setCommentDraft(e.target.value)}
+                  />
+                  <div className="linkedin-input-tools">
+                    {commentDraft.trim() && (
+                      <button type="submit" className="linkedin-post-btn">
+                        Post
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          </form>
+            </form>
+          )}
 
           {/* 2. LinkedIn Sort Line: "Most relevant ▾" */}
           <div className="linkedin-filter-row">
@@ -532,7 +553,13 @@ function ProblemCard({
                         <button
                           type="button"
                           className={`linkedin-action-btn ${c.liked ? 'liked' : ''}`}
-                          onClick={() => onToggleLikeComment(problem.id, c.id)}
+                          onClick={() => {
+                            if (!user) {
+                              onRequireAuth('comment')
+                              return
+                            }
+                            onToggleLikeComment(problem.id, c.id)
+                          }}
                         >
                           <ThumbsUp />
                           <span>{c.likes && c.likes > 0 ? c.likes : 'Like'}</span>
@@ -541,7 +568,13 @@ function ProblemCard({
                         <button
                           type="button"
                           className="linkedin-action-btn"
-                          onClick={() => handleStartReply(c.id, c.user)}
+                          onClick={() => {
+                            if (!user) {
+                              onRequireAuth('comment')
+                              return
+                            }
+                            handleStartReply(c.id, c.user)
+                          }}
                         >
                           <MessageSquare />
                           <span>Reply</span>
@@ -587,7 +620,13 @@ function ProblemCard({
                               <button
                                 type="button"
                                 className={`linkedin-action-btn ${reply.liked ? 'liked' : ''}`}
-                                onClick={() => onToggleLikeComment(problem.id, reply.id)}
+                                onClick={() => {
+                                  if (!user) {
+                                    onRequireAuth('comment')
+                                    return
+                                  }
+                                  onToggleLikeComment(problem.id, reply.id)
+                                }}
                               >
                                 <ThumbsUp />
                                 <span>{reply.likes && reply.likes > 0 ? reply.likes : 'Like'}</span>
@@ -596,7 +635,13 @@ function ProblemCard({
                               <button
                                 type="button"
                                 className="linkedin-action-btn"
-                                onClick={() => handleStartReply(c.id, reply.user)}
+                                onClick={() => {
+                                  if (!user) {
+                                    onRequireAuth('comment')
+                                    return
+                                  }
+                                  handleStartReply(c.id, reply.user)
+                                }}
                               >
                                 <MessageSquare />
                                 <span>Reply</span>
@@ -628,51 +673,30 @@ function ProblemCard({
   )
 }
 
-function PostProblemModal({
+type AuthIntent = 'post' | 'comment' | 'reaction' | 'save' | 'product' | 'general'
+
+function AuthModal({
   onClose,
-  onSubmit,
-  user,
-  onAuth,
+  onAuthSuccess,
+  intent = 'general',
+  initialMode = 'signin',
 }: {
   onClose: () => void
-  onSubmit: (problem: Problem) => Promise<void>
-  user: { id: string; email?: string | null } | null
-  onAuth: (user: { id: string; email?: string | null }) => void
+  onAuthSuccess: (user: { id: string; email?: string | null }) => void
+  intent?: AuthIntent
+  initialMode?: 'signin' | 'signup'
 }) {
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [category, setCategory] = useState('')
-  const [frequency, setFrequency] = useState('')
-  const [timeWasted, setTimeWasted] = useState('')
-  const [currentSolution, setCurrentSolution] = useState('')
-  const [impact, setImpact] = useState('')
-  const [impactDetail, setImpactDetail] = useState('')
-  const [lookingFor, setLookingFor] = useState<string[]>([])
-
-  const [authMode, setAuthMode] = useState<'signup' | 'email'>('signup')
+  const [authMode, setAuthMode] = useState<'signup' | 'signin'>(initialMode)
   const [isLoading, setIsLoading] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [authError, setAuthError] = useState('')
   const [authMessage, setAuthMessage] = useState('')
 
-  const availableLookingTags = ['advice', 'existing tools', 'build a solution', 'collaborate']
-
-  function toggleLookingTag(tag: string) {
-    setLookingFor((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-    )
-  }
-
-  function switchAuthMode(mode: 'signup' | 'email') {
+  function switchAuthMode(mode: 'signup' | 'signin') {
     setAuthMode(mode)
     setAuthError('')
     setAuthMessage('')
-  }
-
-  function handleGuestAuth() {
-    const guestId = `guest_${Date.now()}`
-    onAuth({ id: guestId, email: 'guest@problemhub.local' })
   }
 
   async function handleGoogleSignUp() {
@@ -686,15 +710,15 @@ function PostProblemModal({
         options: { redirectTo: redirectUrl },
       })
       if (error) throw error
-    } catch (err) {
-      console.log('[v0] OAuth error:', err)
-      setAuthError('Google sign-in is not enabled in your Supabase project. Use Email or Continue as Guest.')
+    } catch (err: any) {
+      console.log('[ProblemHub] OAuth error:', err)
+      setAuthError('Google sign-in is not enabled in your Supabase project. Please sign in with Email.')
     } finally {
       setIsLoading(false)
     }
   }
 
-  async function handleEmailAuth(event?: React.MouseEvent<HTMLButtonElement>) {
+  async function handleEmailAuth(event?: React.FormEvent) {
     event?.preventDefault()
     setAuthError('')
     setAuthMessage('')
@@ -715,32 +739,179 @@ function PostProblemModal({
         })
         if (error) throw error
         if (data.session && data.user) {
-          onAuth({ id: data.user.id, email: data.user.email })
+          onAuthSuccess({ id: data.user.id, email: data.user.email })
         } else {
-          setAuthMessage('Account created! Please check your email to verify, or click "Continue as Guest" to post right now.')
+          setAuthMessage('Account created! Please check your email inbox to verify your account, then sign in.')
         }
       } else {
-        const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        })
         if (error) throw error
         if (data.user && data.session) {
-          onAuth({ id: data.user.id, email: data.user.email })
+          onAuthSuccess({ id: data.user.id, email: data.user.email })
         } else {
-          setAuthError('Could not start your session. Check your password or continue as guest.')
+          setAuthError('Could not start your session. Please check your credentials.')
         }
       }
-    } catch (err) {
-      console.log('[v0] Email auth error:', err)
+    } catch (err: any) {
+      console.log('[ProblemHub] Email auth error:', err)
       const message = err instanceof Error ? err.message.toLowerCase() : ''
       if (message.includes('invalid login credentials') || message.includes('invalid email or password')) {
         setAuthError('Invalid email or password.')
       } else if (message.includes('email not confirmed')) {
-        setAuthError('Please confirm your email address, or continue as guest to post now.')
+        setAuthError('Please confirm your email address before signing in.')
+      } else if (message.includes('password should be at least')) {
+        setAuthError('Password should be at least 6 characters.')
       } else {
-        setAuthError('Unable to authenticate. Use "Continue as Guest" for instant testing.')
+        setAuthError(err?.message || 'Unable to authenticate. Please check your credentials.')
       }
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const intentDetails = useMemo(() => {
+    switch (intent) {
+      case 'post':
+        return {
+          kicker: 'ProblemHub Community',
+          title: 'Sign in to Share a Problem',
+          subtitle: 'Tell the community what you\'re stuck on to get advice, find existing tools, or collaborate on solutions.',
+        }
+      case 'comment':
+        return {
+          kicker: 'Join the Discussion',
+          title: 'Sign in to Comment & Reply',
+          subtitle: 'Share your thoughts, advice, or reply to community members solving real challenges.',
+        }
+      case 'reaction':
+        return {
+          kicker: 'Community Feedback',
+          title: 'Sign in to Vote',
+          subtitle: 'Vote whether you experience this problem or want to build/propose a solution.',
+        }
+      case 'save':
+        return {
+          kicker: 'Personal Bookmarks',
+          title: 'Sign in to Bookmark Problems',
+          subtitle: 'Save this problem to your personal collection to track discussions and progress.',
+        }
+      case 'product':
+        return {
+          kicker: 'Showcase & Sponsor',
+          title: 'Sign in to Submit Product',
+          subtitle: 'Reach thousands of active professionals and builders solving real problems.',
+        }
+      default:
+        return {
+          kicker: 'Welcome to ProblemHub',
+          title: 'Sign in to ProblemHub',
+          subtitle: 'Discover opportunities, share real challenges, and build better solutions together.',
+        }
+    }
+  }, [intent])
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="post-modal" role="dialog" aria-modal="true" aria-label={intentDetails.title}>
+        <button className="modal-close" onClick={onClose} aria-label="Close" type="button"><X /></button>
+        <div className="modal-kicker">{intentDetails.kicker}</div>
+        <h2>{intentDetails.title}</h2>
+        <p className="modal-subtitle">{intentDetails.subtitle}</p>
+
+        <div className="modal-auth">
+          <button
+            type="button"
+            className={authMode === 'signin' ? 'selected' : ''}
+            onClick={() => switchAuthMode('signin')}
+          >
+            Sign in
+          </button>
+          <button
+            type="button"
+            className={authMode === 'signup' ? 'selected' : ''}
+            onClick={() => switchAuthMode('signup')}
+          >
+            Sign up
+          </button>
+        </div>
+
+        <button className="modal-google" onClick={handleGoogleSignUp} disabled={isLoading} type="button">
+          <b>G</b> {authMode === 'signup' ? 'Sign up with Google' : 'Sign in with Google'}
+        </button>
+
+        <div className="modal-divider"><span>or with email</span></div>
+
+        <form onSubmit={handleEmailAuth} className="email-fields">
+          <input
+            type="email"
+            placeholder="Email address"
+            aria-label="Email address"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            required
+            autoComplete="email"
+          />
+          <input
+            type="password"
+            placeholder={authMode === 'signup' ? 'Password (min. 6 characters)' : 'Password'}
+            aria-label="Password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+            minLength={6}
+            autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'}
+          />
+          <button type="submit" className="email-continue" disabled={isLoading}>
+            {isLoading
+              ? 'Please wait...'
+              : authMode === 'signup'
+              ? 'Create account with email'
+              : 'Sign in with email'}
+          </button>
+        </form>
+
+        {authError && <p className="auth-error" role="alert">{authError}</p>}
+        {authMessage && <p className="auth-message" role="status">{authMessage}</p>}
+
+        <p className="auth-required">
+          {authMode === 'signup'
+            ? 'Sign up to post problems, comment, vote, and bookmark. Without login, the site is read-only.'
+            : 'Sign in to your account. Without login, ProblemHub is read-only.'}
+        </p>
+      </section>
+    </div>
+  )
+}
+
+function PostProblemModal({
+  onClose,
+  onSubmit,
+  user,
+}: {
+  onClose: () => void
+  onSubmit: (problem: Problem) => Promise<void>
+  user: { id: string; email?: string | null }
+}) {
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [category, setCategory] = useState('')
+  const [frequency, setFrequency] = useState('')
+  const [timeWasted, setTimeWasted] = useState('')
+  const [currentSolution, setCurrentSolution] = useState('')
+  const [impact, setImpact] = useState('')
+  const [impactDetail, setImpactDetail] = useState('')
+  const [lookingFor, setLookingFor] = useState<string[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+
+  const availableLookingTags = ['advice', 'existing tools', 'build a solution', 'collaborate']
+
+  function toggleLookingTag(tag: string) {
+    setLookingFor((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    )
   }
 
   async function submit(event: React.FormEvent) {
@@ -787,168 +958,137 @@ function PostProblemModal({
     <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <section className="post-modal" role="dialog" aria-modal="true" aria-label="Share a problem">
         <button className="modal-close" onClick={onClose} aria-label="Close" type="button"><X /></button>
-        {!user ? (
-          <>
-            <div className="modal-kicker">Be an early user on ProblemHub</div>
-            <h2>Share a problem</h2>
-            <p className="modal-subtitle">Tell the community what you&apos;re stuck on. Your post will appear in the feed below.</p>
-            <div className="modal-auth">
-              <button type="button" className={authMode === 'signup' ? 'selected' : ''} onClick={() => switchAuthMode('signup')}>Sign up</button>
-              <button type="button" className={authMode === 'email' ? 'selected' : ''} onClick={() => switchAuthMode('email')}>Sign in</button>
-            </div>
-            {authMode === 'signup' && (
-              <button className="modal-google" onClick={handleGoogleSignUp} disabled={isLoading} type="button">
-                <b>G</b> Continue with Google
-              </button>
-            )}
-            <button type="button" className="modal-email" onClick={() => switchAuthMode('email')}>
-              <MessageCircle /> Continue with Email
-            </button>
-            <div className="email-fields">
-              <input type="email" placeholder="Email address" aria-label="Email address" value={email} onChange={(event) => setEmail(event.target.value)} />
-              <input type="password" placeholder="Password" aria-label="Password" value={password} onChange={(event) => setPassword(event.target.value)} />
-              <button type="button" className="email-continue" onClick={handleEmailAuth} disabled={isLoading}>
-                {authMode === 'signup' ? 'Create account with email' : 'Sign in with email'}
-              </button>
-            </div>
-            {authError && <p className="auth-error" role="alert">{authError}</p>}
-            {authMessage && <p className="auth-message" role="status">{authMessage}</p>}
+        <form onSubmit={submit} className="post-form">
+          <div className="modal-kicker">ProblemHub Community</div>
+          <h2 style={{ margin: '0 0 8px' }}>Share a Problem</h2>
+          <p className="modal-subtitle" style={{ margin: '0 0 14px' }}>
+            Tell the community what you&apos;re stuck on. Your post will appear in the feed.
+          </p>
+          
+          <label>
+            Title
+            <input
+              required
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="e.g. How do I track which marketing campaigns actually generate revenue?"
+            />
+          </label>
 
-            <button type="button" className="modal-guest" onClick={handleGuestAuth}>
-              <Zap style={{ width: 16, height: 16 }} /> Continue as Guest (Instant Post)
-            </button>
+          <label>
+            Description
+            <textarea
+              required
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              rows={4}
+              placeholder="Describe your pain point, manual effort, or why current solutions fall short..."
+            />
+          </label>
 
-            <p className="auth-required">Sign in or click Continue as Guest to post your problem immediately.</p>
-          </>
-        ) : (
-          <form onSubmit={submit} className="post-form">
-            <h3 className="form-heading">Share a Problem</h3>
-            
+          <div className="form-grid-2">
             <label>
-              Title
+              Category
+              <input
+                list="category-suggestions"
+                required
+                value={category}
+                onChange={(event) => setCategory(event.target.value)}
+                placeholder="Select or enter category..."
+              />
+              <datalist id="category-suggestions">
+                <option value="Marketing" />
+                <option value="Development" />
+                <option value="Operations" />
+                <option value="Finance" />
+                <option value="Design" />
+                <option value="Sales" />
+                <option value="AI & Machine Learning" />
+                <option value="Product Management" />
+                <option value="Customer Support" />
+                <option value="DevOps & Cloud" />
+                <option value="Other" />
+              </datalist>
+            </label>
+
+            <label>
+              Frequency
               <input
                 required
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                placeholder="e.g. How do I track which marketing campaigns actually generate revenue?"
+                value={frequency}
+                onChange={(event) => setFrequency(event.target.value)}
+                placeholder="e.g. Weekly, Daily, Monthly"
+              />
+            </label>
+          </div>
+
+          <div className="form-grid-2">
+            <label>
+              Time wasted
+              <input
+                required
+                value={timeWasted}
+                onChange={(event) => setTimeWasted(event.target.value)}
+                placeholder="e.g. 4–5 hours"
               />
             </label>
 
             <label>
-              Description
-              <textarea
+              Current solution
+              <input
                 required
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                rows={4}
-                placeholder="Describe your pain point, manual effort, or why current solutions fall short..."
+                value={currentSolution}
+                onChange={(event) => setCurrentSolution(event.target.value)}
+                placeholder="e.g. Excel + manual exports"
+              />
+            </label>
+          </div>
+
+          <div className="form-grid-2">
+            <label>
+              Impact
+              <input
+                required
+                value={impact}
+                onChange={(event) => setImpact(event.target.value)}
+                placeholder="e.g. High, Critical, Medium"
               />
             </label>
 
-            <div className="form-grid-2">
-              <label>
-                Category
-                <input
-                  list="category-suggestions"
-                  required
-                  value={category}
-                  onChange={(event) => setCategory(event.target.value)}
-                  placeholder="Select or enter category..."
-                />
-                <datalist id="category-suggestions">
-                  <option value="Marketing" />
-                  <option value="Development" />
-                  <option value="Operations" />
-                  <option value="Finance" />
-                  <option value="Design" />
-                  <option value="Sales" />
-                  <option value="AI & Machine Learning" />
-                  <option value="Product Management" />
-                  <option value="Customer Support" />
-                  <option value="DevOps & Cloud" />
-                  <option value="Other" />
-                </datalist>
-              </label>
+            <label>
+              Impact detail (optional)
+              <input
+                value={impactDetail}
+                onChange={(event) => setImpactDetail(event.target.value)}
+                placeholder="e.g. (time + accuracy)"
+              />
+            </label>
+          </div>
 
-              <label>
-                Frequency
-                <input
-                  required
-                  value={frequency}
-                  onChange={(event) => setFrequency(event.target.value)}
-                  placeholder="e.g. Weekly, Daily, Monthly"
-                />
-              </label>
+          <div className="looking-tag-group">
+            <span>Looking for:</span>
+            <div className="looking-tag-row">
+              {availableLookingTags.map((tag) => {
+                const isSelected = lookingFor.includes(tag)
+                return (
+                  <button
+                    type="button"
+                    key={tag}
+                    className={`tag-toggle-btn ${isSelected ? 'active' : ''}`}
+                    onClick={() => toggleLookingTag(tag)}
+                  >
+                    {isSelected ? '✓ ' : '+ '}
+                    {tag}
+                  </button>
+                )
+              })}
             </div>
+          </div>
 
-            <div className="form-grid-2">
-              <label>
-                Time wasted
-                <input
-                  required
-                  value={timeWasted}
-                  onChange={(event) => setTimeWasted(event.target.value)}
-                  placeholder="e.g. 4–5 hours"
-                />
-              </label>
-
-              <label>
-                Current solution
-                <input
-                  required
-                  value={currentSolution}
-                  onChange={(event) => setCurrentSolution(event.target.value)}
-                  placeholder="e.g. Excel + manual exports"
-                />
-              </label>
-            </div>
-
-            <div className="form-grid-2">
-              <label>
-                Impact
-                <input
-                  required
-                  value={impact}
-                  onChange={(event) => setImpact(event.target.value)}
-                  placeholder="e.g. High, Critical, Medium"
-                />
-              </label>
-
-              <label>
-                Impact detail (optional)
-                <input
-                  value={impactDetail}
-                  onChange={(event) => setImpactDetail(event.target.value)}
-                  placeholder="e.g. (time + accuracy)"
-                />
-              </label>
-            </div>
-
-            <div className="looking-tag-group">
-              <span>Looking for:</span>
-              <div className="looking-tag-row">
-                {availableLookingTags.map((tag) => {
-                  const isSelected = lookingFor.includes(tag)
-                  return (
-                    <button
-                      type="button"
-                      key={tag}
-                      className={`tag-toggle-btn ${isSelected ? 'active' : ''}`}
-                      onClick={() => toggleLookingTag(tag)}
-                    >
-                      {isSelected ? '✓ ' : '+ '}
-                      {tag}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            <button className="submit-problem" type="submit" disabled={isLoading}>
-              {isLoading ? 'Posting...' : 'Share Problem'}
-            </button>
-          </form>
-        )}
+          <button className="submit-problem" type="submit" disabled={isLoading}>
+            {isLoading ? 'Posting...' : 'Share Problem'}
+          </button>
+        </form>
       </section>
     </div>
   )
@@ -957,12 +1097,14 @@ function PostProblemModal({
 function AddProductModal({
   onClose,
   onSuccess,
+  user,
 }: {
   onClose: () => void
   onSuccess: (msg: string) => void
+  user: { id: string; email?: string | null } | null
 }) {
   const [website, setWebsite] = useState('')
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(user?.email || '')
   const [isLoading, setIsLoading] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
@@ -970,6 +1112,11 @@ function AddProductModal({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setErrorMsg('')
+    if (!user) {
+      setErrorMsg('You must be signed in to submit a product.')
+      return
+    }
+
     const cleanWebsite = website.trim()
     const cleanEmail = email.trim()
 
@@ -1051,7 +1198,7 @@ function AddProductModal({
           </div>
         ) : (
           <>
-            <div className="modal-kicker">Showcase & Sponsor</div>
+            <div className="modal-kicker">Showcase & Products</div>
             <h2>Add Your Product</h2>
             <p className="modal-subtitle">
               Reach thousands of active professionals and builders solving real problems. Submit your product details below to get listed.
@@ -1109,8 +1256,8 @@ export default function Page() {
   const [showAddProductModal, setShowAddProductModal] = useState(false)
   const [pageReady, setPageReady] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const [productList, setProductList] = useState<SponsoredProduct[]>([])
-  const [displayedProducts, setDisplayedProducts] = useState<SponsoredProduct[]>([])
+  const [productList, setProductList] = useState<SponsoredProduct[]>(DEFAULT_PRODUCTS)
+  const [displayedProducts, setDisplayedProducts] = useState<SponsoredProduct[]>(DEFAULT_PRODUCTS)
   const [swappingSlot, setSwappingSlot] = useState<number | null>(null)
   const displayedProductsRef = useRef(displayedProducts)
   displayedProductsRef.current = displayedProducts
@@ -1144,9 +1291,51 @@ export default function Page() {
   }, [productList])
 
   const [showPostModal, setShowPostModal] = useState(false)
+  const [showAuthModal, setShowAuthModal] = useState(false)
+  const [authIntent, setAuthIntent] = useState<AuthIntent>('general')
+  const [authInitialMode, setAuthInitialMode] = useState<'signin' | 'signup'>('signin')
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [problems, setProblems] = useState<Problem[]>([])
+  const [highlightedPostId, setHighlightedPostId] = useState<string | null>(null)
+  const [tabAnimKey, setTabAnimKey] = useState(0)
   const [user, setUser] = useState<{ id: string; email?: string | null } | null>(null)
+
+  function handleTabClick(tab: 'Latest' | 'Top' | 'Posts' | 'Saved') {
+    setActiveTab(tab)
+    setTabAnimKey((prev) => prev + 1)
+
+    const feedEl = document.querySelector('.feed') as HTMLElement | null
+    if (feedEl) {
+      feedEl.scrollTo({ top: 0, left: 0, behavior: 'smooth' })
+    }
+    window.scrollTo({ top: 0, left: 0, behavior: 'smooth' })
+    setShowHeader(true)
+    setIsScrolled(false)
+
+    // If user clicked the current tab, re-fetch in background to refresh posts
+    if (loadDataRef.current && tab === activeTab) {
+      loadDataRef.current()
+    }
+  }
+
+  function requireAuth(intent: AuthIntent = 'general', mode: 'signin' | 'signup' = 'signin') {
+    setAuthIntent(intent)
+    setAuthInitialMode(mode)
+    setShowAuthModal(true)
+  }
+
+  function handleAuthSuccess(authenticatedUser: { id: string; email?: string | null }) {
+    setUser(authenticatedUser)
+    setShowAuthModal(false)
+    if (authIntent === 'post') {
+      setShowPostModal(true)
+    } else if (authIntent === 'product') {
+      setShowAddProductModal(true)
+    } else {
+      setToastMessage(`Signed in as ${authenticatedUser.email || 'User'}`)
+      setTimeout(() => setToastMessage(null), 3000)
+    }
+  }
 
   // Dynamically derive categories from live problems in the community
   const categoriesList = useMemo(() => {
@@ -1203,6 +1392,81 @@ export default function Page() {
     }
   }, [])
 
+  // Enable scrolling the feed when scrolling anywhere on the screen (left sidebar, right sidebar, margins)
+  useEffect(() => {
+    let startY = 0
+
+    const handleGlobalWheel = (e: WheelEvent) => {
+      const target = e.target as HTMLElement | null
+      if (!target) return
+      // If user is inside an interactive modal, input, or textarea, don't intercept
+      if (target.closest('.modal-backdrop, .modal-card, .auth-modal-card, textarea, input, select')) {
+        return
+      }
+
+      const feedEl = document.querySelector('.feed') as HTMLElement | null
+      if (!feedEl) return
+
+      // If wheel event originated outside the feed (e.g. left rail, right rail, body margins), forward it to the feed
+      if (!feedEl.contains(target)) {
+        feedEl.scrollTop += e.deltaY
+      }
+    }
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length > 0) {
+        startY = e.touches[0].clientY
+      }
+    }
+
+    const handleTouchMove = (e: TouchEvent) => {
+      const target = e.target as HTMLElement | null
+      if (!target || target.closest('.modal-backdrop, .modal-card, .auth-modal-card, textarea, input, select')) {
+        return
+      }
+      const feedEl = document.querySelector('.feed') as HTMLElement | null
+      if (!feedEl || feedEl.contains(target)) return
+
+      if (e.touches.length > 0) {
+        const currentY = e.touches[0].clientY
+        const delta = startY - currentY
+        startY = currentY
+        feedEl.scrollTop += delta
+      }
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      if (target && target.closest('input, textarea, select, [contenteditable="true"]')) {
+        return
+      }
+      const feedEl = document.querySelector('.feed') as HTMLElement | null
+      if (!feedEl) return
+
+      if (e.key === 'ArrowDown') {
+        feedEl.scrollTop += 60
+      } else if (e.key === 'ArrowUp') {
+        feedEl.scrollTop -= 60
+      } else if (e.key === 'PageDown' || (e.key === ' ' && !e.shiftKey)) {
+        feedEl.scrollTop += window.innerHeight * 0.75
+      } else if (e.key === 'PageUp' || (e.key === ' ' && e.shiftKey)) {
+        feedEl.scrollTop -= window.innerHeight * 0.75
+      }
+    }
+
+    window.addEventListener('wheel', handleGlobalWheel, { passive: true })
+    window.addEventListener('touchstart', handleTouchStart, { passive: true })
+    window.addEventListener('touchmove', handleTouchMove, { passive: true })
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('wheel', handleGlobalWheel)
+      window.removeEventListener('touchstart', handleTouchStart)
+      window.removeEventListener('touchmove', handleTouchMove)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
+
   const loadDataRef = useRef<(() => Promise<void>) | null>(null)
 
   useEffect(() => {
@@ -1215,7 +1479,7 @@ export default function Page() {
           setUser(currentUser)
         }
 
-        // 1. Fetch Dynamic Sponsored Products
+        // 1. Fetch Dynamic Products
         try {
           const { data: prodData, error: prodErr } = await supabase
             .from('problemhub_products')
@@ -1226,15 +1490,23 @@ export default function Page() {
             const mappedProds: SponsoredProduct[] = prodData.map((p: any) => ({
               name: p.name,
               description: p.description,
-              className: p.class_name || 'product-blue',
+              className: p.class_name || (p.name?.toLowerCase() === 'sorget' ? 'product-sorget' : 'product-blue'),
               mark: p.mark || (p.name ? p.name.charAt(0).toUpperCase() : '★'),
               url: p.url || '#',
+              logoUrl: p.logo_url || (p.name?.toLowerCase() === 'sorget' ? '/sorget-logo.png' : undefined),
             }))
-            setProductList(mappedProds)
-            setDisplayedProducts(mappedProds.slice(0, 5))
+            const hasSorget = mappedProds.some((p) => p.name.toLowerCase() === 'sorget')
+            const finalProds = hasSorget ? mappedProds : [...DEFAULT_PRODUCTS, ...mappedProds]
+            setProductList(finalProds)
+            setDisplayedProducts(finalProds.slice(0, 5))
+          } else {
+            setProductList(DEFAULT_PRODUCTS)
+            setDisplayedProducts(DEFAULT_PRODUCTS.slice(0, 5))
           }
         } catch (e) {
           console.warn('Products fetch error:', e)
+          setProductList(DEFAULT_PRODUCTS)
+          setDisplayedProducts(DEFAULT_PRODUCTS.slice(0, 5))
         }
 
         // 2. Fetch User Saved Posts (if logged in)
@@ -1306,21 +1578,20 @@ export default function Page() {
           console.warn('Comments fetch error:', e)
         }
 
-        // 4. Fetch User Reactions (Problem & Solution votes)
-        const voterId = currentUser?.id || getClientVoterId()
-        const localReactions = getLocalReactions()
+        // 4. Fetch User Reactions (Problem & Solution votes) for logged-in user
         const userReactionsSet = new Set<string>()
-
-        try {
-          const { data: rxData, error: rxErr } = await supabase
-            .from('problemhub_reactions')
-            .select('problem_id, reaction_type')
-            .eq('user_id', voterId)
-          if (!rxErr && rxData) {
-            rxData.forEach((r: any) => userReactionsSet.add(`${r.problem_id}:${r.reaction_type}`))
+        if (currentUser?.id) {
+          try {
+            const { data: rxData, error: rxErr } = await supabase
+              .from('problemhub_reactions')
+              .select('problem_id, reaction_type')
+              .eq('user_id', currentUser.id)
+            if (!rxErr && rxData) {
+              rxData.forEach((r: any) => userReactionsSet.add(`${r.problem_id}:${r.reaction_type}`))
+            }
+          } catch (e) {
+            console.warn('Reactions fetch note (dynamic mode):', e)
           }
-        } catch (e) {
-          console.warn('Reactions fetch note (dynamic mode):', e)
         }
 
         // 5. Fetch Dynamic Posts
@@ -1333,8 +1604,8 @@ export default function Page() {
           const mappedPosts: Problem[] = postsData.map((post: any) => {
             const postComments = commentsByProblem[post.id] || []
             const totalCount = postComments.reduce((acc, c) => acc + 1 + (c.replies ? c.replies.length : 0), 0) || post.comments_count || 0
-            const hasProblemVote = userReactionsSet.has(`${post.id}:problem`) || Boolean(localReactions[`${post.id}:problem`])
-            let hasSolutionVote = userReactionsSet.has(`${post.id}:solution`) || Boolean(localReactions[`${post.id}:solution`])
+            const hasProblemVote = userReactionsSet.has(`${post.id}:problem`)
+            let hasSolutionVote = userReactionsSet.has(`${post.id}:solution`)
             if (hasProblemVote && hasSolutionVote) {
               hasSolutionVote = false
             }
@@ -1366,6 +1637,76 @@ export default function Page() {
               commentsList: postComments,
             }
           })
+
+          // Check if a specific post is requested in URL query ?post=<id> or hash #problem-<id>
+          if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search)
+            const postParam = params.get('post')
+            const hash = window.location.hash
+            const hashPost = hash.startsWith('#problem-') ? hash.replace('#problem-', '') : null
+            const targetId = postParam || hashPost
+
+            if (targetId && !mappedPosts.some((p) => p.id === targetId)) {
+              try {
+                const { data: singlePost } = await supabase
+                  .from('problemhub_posts')
+                  .select('*')
+                  .eq('id', targetId)
+                  .single()
+
+                if (singlePost) {
+                  const { data: singleComments } = await supabase
+                    .from('problemhub_comments')
+                    .select('*')
+                    .eq('post_id', targetId)
+                    .order('created_at', { ascending: true })
+
+                  const formattedComments = (singleComments || []).map((c: any) => ({
+                    id: c.id,
+                    userId: c.user_id,
+                    user: c.author_name || 'Community Member',
+                    initials: (c.author_name || 'U').charAt(0).toUpperCase(),
+                    accent: 'avatar-blue',
+                    text: c.comment_text,
+                    time: formatRelativeTime(c.created_at),
+                    likes: c.likes_count || 0,
+                    liked: userLikedComments.has(c.id),
+                    parentId: c.parent_id || null,
+                  }))
+
+                  mappedPosts.unshift({
+                    id: singlePost.id,
+                    userId: singlePost.user_id,
+                    user: singlePost.author_name || 'Community Member',
+                    initials: singlePost.author_initials || (singlePost.author_name ? singlePost.author_name.charAt(0) : 'U').toUpperCase(),
+                    time: formatRelativeTime(singlePost.created_at),
+                    category: singlePost.category || 'General',
+                    categoryClass: (singlePost.category || 'general').toLowerCase().replace(/[^a-z0-9]/g, '-'),
+                    title: singlePost.title,
+                    paragraphs: singlePost.description ? singlePost.description.split('\n\n') : [''],
+                    frequency: singlePost.frequency || '',
+                    timeWasted: singlePost.time_wasted || '',
+                    currentSolution: singlePost.current_solution || '',
+                    impact: singlePost.impact || '',
+                    impactDetail: singlePost.impact_detail || '',
+                    lookingFor: singlePost.looking_for || [],
+                    comments: formattedComments.length,
+                    people: singlePost.people_count || 1,
+                    problemVotes: singlePost.problem_votes ?? 0,
+                    solutionVotes: singlePost.solution_votes ?? 0,
+                    userVotedProblem: userProblemReactions.has(singlePost.id),
+                    userVotedSolution: userSolutionReactions.has(singlePost.id),
+                    accent: singlePost.author_accent || 'avatar-blue',
+                    saved: savedSet.has(singlePost.id),
+                    commentsList: formattedComments,
+                  })
+                }
+              } catch (singleErr) {
+                console.warn('Could not fetch direct targeted post:', singleErr)
+              }
+            }
+          }
+
           setProblems(mappedPosts)
         } else if (!postsErr && postsData && postsData.length === 0) {
           setProblems([])
@@ -1379,6 +1720,24 @@ export default function Page() {
     loadData().then(() => {
       // Small delay to let React render, then fade in
       requestAnimationFrame(() => setPageReady(true))
+
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search)
+        const postParam = params.get('post')
+        const hash = window.location.hash
+        const hashPost = hash.startsWith('#problem-') ? hash.replace('#problem-', '') : null
+        const targetId = postParam || hashPost
+
+        if (targetId) {
+          setHighlightedPostId(targetId)
+          setTimeout(() => {
+            const el = document.getElementById(`problem-${targetId}`)
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            }
+          }, 350)
+        }
+      }
     })
 
     let listener: { subscription?: { unsubscribe: () => void } } | null = null
@@ -1395,9 +1754,44 @@ export default function Page() {
     }
   }, [])
 
+  // Listen to browser navigation changes (Back/Forward buttons, hash navigation)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const handleUrlTargetChange = () => {
+      const params = new URLSearchParams(window.location.search)
+      const postParam = params.get('post')
+      const hash = window.location.hash
+      const hashPost = hash.startsWith('#problem-') ? hash.replace('#problem-', '') : null
+      const targetId = postParam || hashPost
+
+      if (targetId) {
+        setHighlightedPostId(targetId)
+        setTimeout(() => {
+          const el = document.getElementById(`problem-${targetId}`)
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }
+        }, 150)
+      } else {
+        setHighlightedPostId(null)
+      }
+    }
+
+    window.addEventListener('popstate', handleUrlTargetChange)
+    window.addEventListener('hashchange', handleUrlTargetChange)
+    return () => {
+      window.removeEventListener('popstate', handleUrlTargetChange)
+      window.removeEventListener('hashchange', handleUrlTargetChange)
+    }
+  }, [])
 
   const filteredProblems = useMemo(() => {
     let list = problems.filter((problem) => {
+      // If a specific post is being directly viewed/shared, always include it in the feed
+      if (highlightedPostId && problem.id === highlightedPostId) {
+        return true
+      }
       const textMatch = `${problem.title} ${problem.category} ${problem.user} ${problem.paragraphs.join(' ')}`.toLowerCase().includes(query.toLowerCase())
       const categoryMatch = selectedCategory === 'All' || problem.category.toLowerCase() === selectedCategory.toLowerCase()
       return textMatch && categoryMatch
@@ -1436,10 +1830,26 @@ export default function Page() {
     } catch {}
     setUser(null)
     setShowPostModal(false)
+    setShowAddProductModal(false)
+    setShowAuthModal(false)
+    setProblems((prev) =>
+      prev.map((p) => ({
+        ...p,
+        userVotedProblem: false,
+        userVotedSolution: false,
+        saved: false,
+      }))
+    )
+    setToastMessage('Signed out successfully.')
+    setTimeout(() => setToastMessage(null), 3000)
   }
 
   async function handleToggleReaction(problemId: string, type: 'problem' | 'solution') {
-    const voterId = user?.id || getClientVoterId()
+    if (!user) {
+      requireAuth('reaction')
+      return
+    }
+    const voterId = user.id
     let nextVotedProblem = false
     let nextVotedSolution = false
     let nextProblemCount = 0
@@ -1507,15 +1917,9 @@ export default function Page() {
       })
     )
 
-    // 2. Cache in localStorage (mutually exclusive)
     const activeType = nextVotedProblem ? 'problem' : nextVotedSolution ? 'solution' : null
-    if (activeType) {
-      setLocalReaction(problemId, activeType, true)
-    } else {
-      setLocalReaction(problemId, type, false)
-    }
 
-    // 3. Persist reaction to Supabase asynchronously
+    // 2. Persist reaction to Supabase asynchronously
     try {
       const supabase = createClient()
 
@@ -1546,12 +1950,15 @@ export default function Page() {
         })
         .eq('id', problemId)
     } catch (err) {
-      console.warn('Supabase reaction sync error (handled dynamically):', err)
+      console.warn('Supabase reaction sync error:', err)
     }
   }
 
   async function handleSubmit(problem: Problem) {
-    if (!user) return
+    if (!user) {
+      requireAuth('post')
+      return
+    }
     let createdId = problem.id
 
     try {
@@ -1606,6 +2013,11 @@ export default function Page() {
   }
 
   async function handleToggleSave(id: string) {
+    if (!user) {
+      requireAuth('save')
+      return
+    }
+
     let willSave = false
     setProblems((prev) =>
       prev.map((p) => {
@@ -1617,32 +2029,35 @@ export default function Page() {
       })
     )
 
-    if (user?.id) {
-      try {
-        const supabase = createClient()
-        if (willSave) {
-          await supabase.from('problemhub_saved').insert({
-            user_id: user.id,
-            problem_id: id,
-          })
-        } else {
-          await supabase
-            .from('problemhub_saved')
-            .delete()
-            .match({ user_id: user.id, problem_id: id })
-        }
-      } catch (err) {
-        console.warn('Saved sync error:', err)
+    try {
+      const supabase = createClient()
+      if (willSave) {
+        await supabase.from('problemhub_saved').insert({
+          user_id: user.id,
+          problem_id: id,
+        })
+      } else {
+        await supabase
+          .from('problemhub_saved')
+          .delete()
+          .match({ user_id: user.id, problem_id: id })
       }
+    } catch (err) {
+      console.warn('Saved sync error:', err)
     }
   }
 
   async function handleAddComment(problemId: string, text: string, parentId?: string | null) {
-    const author = user?.email ? user.email.split('@')[0] : 'Community Member'
+    if (!user) {
+      requireAuth('comment')
+      return
+    }
+
+    const author = user.email ? user.email.split('@')[0] : 'Community Member'
     const newCommentId = `c-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`
     const newComment: CommentItem = {
       id: newCommentId,
-      userId: user?.id || 'guest',
+      userId: user.id,
       user: author,
       initials: (author[0] || 'U').toUpperCase(),
       accent: 'avatar-emerald',
@@ -1661,7 +2076,7 @@ export default function Page() {
         id: newCommentId,
         problem_id: problemId,
         parent_id: parentId || null,
-        user_id: user?.id || 'guest',
+        user_id: user.id,
         author_name: author,
         author_initials: (author[0] || 'U').toUpperCase(),
         author_accent: 'avatar-emerald',
@@ -1709,6 +2124,11 @@ export default function Page() {
   }
 
   async function handleToggleLikeComment(problemId: string, commentId: string) {
+    if (!user) {
+      requireAuth('comment')
+      return
+    }
+
     let nextLikes = 0
     let isLikedNow = false
 
@@ -1753,20 +2173,50 @@ export default function Page() {
     } catch {}
   }
 
-  function handleShare(problem: Problem) {
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      navigator.clipboard.writeText(`${window.location.origin}/#problem-${problem.id}`)
-      setToastMessage(`Copied link to "${problem.title.slice(0, 32)}..."`)
-      setTimeout(() => setToastMessage(null), 3000)
+  async function handleShare(problem: Problem) {
+    const postUrl = `${window.location.origin}/?post=${problem.id}`
+
+    // 1. Update address bar to post's unique URL without reloading
+    if (typeof window !== 'undefined') {
+      window.history.pushState(null, '', `/?post=${problem.id}`)
     }
+
+    // 2. Visually focus and scroll smoothly to the post
+    setHighlightedPostId(problem.id)
+    const el = document.getElementById(`problem-${problem.id}`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+
+    // 3. Copy direct link to clipboard
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      try {
+        await navigator.clipboard.writeText(postUrl)
+        setToastMessage('Link copied to clipboard!')
+        setTimeout(() => setToastMessage(null), 3000)
+        return
+      } catch {}
+    }
+    setToastMessage('Link copied to clipboard!')
+    setTimeout(() => setToastMessage(null), 3000)
   }
 
 
   // Smooth refresh: fade out, re-fetch data, scroll to top, reset state, fade in
   async function refreshApp() {
     setIsRefreshing(true)
+
+    // Scroll feed container and window to top
+    const feedEl = document.querySelector('.feed') as HTMLElement | null
+    if (feedEl) {
+      feedEl.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+    }
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+    setShowHeader(true)
+    setIsScrolled(false)
+
     // Wait for the fade-out transition
-    await new Promise((r) => setTimeout(r, 250))
+    await new Promise((r) => setTimeout(r, 200))
     // Reset UI state
     setActiveTab('Latest')
     setSelectedCategory('All')
@@ -1776,14 +2226,19 @@ export default function Page() {
     setShowPostModal(false)
     setShowAddProductModal(false)
     setToastMessage(null)
-    // Scroll to top instantly
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+    setHighlightedPostId(null)
+    if (typeof window !== 'undefined') {
+      window.history.pushState(null, '', window.location.pathname)
+    }
+
     // Re-fetch all data
     if (loadDataRef.current) {
       await loadDataRef.current()
     }
+
+    setTabAnimKey((prev) => prev + 1)
     // Small pause then fade back in
-    await new Promise((r) => setTimeout(r, 80))
+    await new Promise((r) => setTimeout(r, 60))
     setIsRefreshing(false)
   }
 
@@ -1817,7 +2272,10 @@ export default function Page() {
             <button
               type="button"
               className="mobile-share-btn"
-              onClick={() => setShowPostModal(true)}
+              onClick={() => {
+                if (!user) requireAuth('post')
+                else setShowPostModal(true)
+              }}
               title="Share a Problem"
               aria-label="Share a Problem"
             >
@@ -1843,7 +2301,7 @@ export default function Page() {
               <button
                 type="button"
                 className="mobile-signin-btn"
-                onClick={() => setShowPostModal(true)}
+                onClick={() => requireAuth('general', 'signin')}
               >
                 Sign In
               </button>
@@ -1892,10 +2350,10 @@ export default function Page() {
               </h1>
             </div>
             <div className="signup-stack">
-              <button type="button" className="google-button" onClick={() => setShowPostModal(true)}>
+              <button type="button" className="google-button" onClick={() => requireAuth('general', 'signup')}>
                 <b>G</b>Sign up with Google
               </button>
-              <button type="button" className="email-button" onClick={() => setShowPostModal(true)}>
+              <button type="button" className="email-button" onClick={() => requireAuth('general', 'signup')}>
                 <MessageCircle /> Sign up with Email
               </button>
             </div>
@@ -1940,7 +2398,15 @@ export default function Page() {
                   key={cat}
                   type="button"
                   className={`category-chip ${selectedCategory === cat ? 'active' : ''}`}
-                  onClick={() => setSelectedCategory(cat)}
+                  onClick={() => {
+                    setSelectedCategory(cat)
+                    setTabAnimKey((prev) => prev + 1)
+                    const feedEl = document.querySelector('.feed') as HTMLElement | null
+                    if (feedEl) {
+                      feedEl.scrollTo({ top: 0, left: 0, behavior: 'smooth' })
+                    }
+                    window.scrollTo({ top: 0, left: 0, behavior: 'smooth' })
+                  }}
                 >
                   {cat}
                 </button>
@@ -1955,7 +2421,7 @@ export default function Page() {
                   type="button"
                   className={activeTab === tab ? 'active' : ''}
                   key={tab}
-                  onClick={() => setActiveTab(tab)}
+                  onClick={() => handleTabClick(tab)}
                 >
                   {tab}
                 </button>
@@ -1965,7 +2431,10 @@ export default function Page() {
             <button
               type="button"
               className="tab-add-post-btn"
-              onClick={() => setShowPostModal(true)}
+              onClick={() => {
+                if (!user) requireAuth('post')
+                else setShowPostModal(true)
+              }}
               aria-label="Add a new post"
             >
               <Plus />
@@ -1973,75 +2442,90 @@ export default function Page() {
             </button>
           </nav>
         </div>
-
         {posted && (
           <div className="posted-note">
             <Check /> Your problem was added to the community feed.
           </div>
         )}
 
-        {filteredProblems.length ? (
-          filteredProblems.map((problem) => (
-            <ProblemCard
-              key={problem.id}
-              problem={problem}
-              onToggleSave={handleToggleSave}
-              onShare={handleShare}
-              onAddComment={handleAddComment}
-              onToggleLikeComment={handleToggleLikeComment}
-              onToggleReaction={handleToggleReaction}
-              user={user}
-            />
-          ))
-        ) : (
-          <div className="empty-state">
-            {problems.length === 0 ? (
-              <div className="empty-feed-card">
-                <div className="empty-feed-icon">💡</div>
-                <h3>No problems shared yet</h3>
-                <p>
-                  Be the first to share a frustration, inefficiency, or pain point you face in your daily work. Discover opportunities and build solutions together.
-                </p>
-                <button
-                  type="button"
-                  className="empty-feed-btn"
-                  onClick={() => setShowPostModal(true)}
-                >
-                  <Plus style={{ width: 16, height: 16 }} /> Share a Problem
-                </button>
-              </div>
-            ) : activeTab === 'Saved' ? (
-              'You have no saved problems yet. Click "Save" on any problem to bookmark it here.'
-            ) : activeTab === 'Posts' ? (
-              user ? (
-                'You haven\'t posted any problems or replies yet. Share a problem or comment on discussions to see them here.'
-              ) : (
-                <div className="tab-signin-prompt">
-                  <p>Sign in to view your posts and replies.</p>
-                  <button type="button" className="tab-signin-btn" onClick={() => setShowPostModal(true)}>
-                    Sign In to View Posts
-                  </button>
-                </div>
-              )
-            ) : (
-              <div className="empty-search-state">
-                <p>No problems match “{query || selectedCategory}”.</p>
-                {(query || selectedCategory !== 'All') && (
+        <div key={tabAnimKey} className="feed-posts-container">
+          {filteredProblems.length ? (
+            filteredProblems.map((problem) => (
+              <ProblemCard
+                key={problem.id}
+                problem={problem}
+                onToggleSave={handleToggleSave}
+                onShare={handleShare}
+                onAddComment={handleAddComment}
+                onToggleLikeComment={handleToggleLikeComment}
+                onToggleReaction={handleToggleReaction}
+                onRequireAuth={requireAuth}
+                user={user}
+                isHighlighted={highlightedPostId === problem.id}
+              />
+            ))
+          ) : (
+            <div className="empty-state">
+              {problems.length === 0 ? (
+                <div className="empty-feed-card">
+                  <div className="empty-feed-icon">💡</div>
+                  <h3>No problems shared yet</h3>
+                  <p>
+                    Be the first to share a frustration, inefficiency, or pain point you face in your daily work. Discover opportunities and build solutions together.
+                  </p>
                   <button
                     type="button"
-                    className="clear-filters-btn"
+                    className="empty-feed-btn"
                     onClick={() => {
-                      setQuery('')
-                      setSelectedCategory('All')
+                      if (!user) requireAuth('post')
+                      else setShowPostModal(true)
                     }}
                   >
-                    Clear search & filters
+                    <Plus style={{ width: 16, height: 16 }} /> Share a Problem
                   </button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+                </div>
+              ) : activeTab === 'Saved' ? (
+                user ? (
+                  'You have no saved problems yet. Click "Save" on any problem to bookmark it here.'
+                ) : (
+                  <div className="tab-signin-prompt">
+                    <p>Sign in with Google or Email to view your saved problems.</p>
+                    <button type="button" className="tab-signin-btn" onClick={() => requireAuth('save', 'signin')}>
+                      Sign In to View Saved
+                    </button>
+                  </div>
+                )
+              ) : activeTab === 'Posts' ? (
+                user ? (
+                  'You haven\'t posted any problems or replies yet. Share a problem or comment on discussions to see them here.'
+                ) : (
+                  <div className="tab-signin-prompt">
+                    <p>Sign in to view your posts and replies.</p>
+                    <button type="button" className="tab-signin-btn" onClick={() => requireAuth('general', 'signin')}>
+                      Sign In to View Posts
+                    </button>
+                  </div>
+                )
+              ) : (
+                <div className="empty-search-state">
+                  <p>No problems match “{query || selectedCategory}”.</p>
+                  {(query || selectedCategory !== 'All') && (
+                    <button
+                      type="button"
+                      className="clear-filters-btn"
+                      onClick={() => {
+                        setQuery('')
+                        setSelectedCategory('All')
+                      }}
+                    >
+                      Clear search & filters
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </section>
 
       <aside className="right-rail">
@@ -2051,7 +2535,7 @@ export default function Page() {
             <p>
               Share a real problem you face in your work or professional life. The community can discuss it, and maybe someone will build a solution.
             </p>
-            <button type="button" className="post-button" onClick={() => setShowPostModal(true)}>
+            <button type="button" className="post-button" onClick={() => requireAuth('post')}>
               <Pencil /> Post a Problem
             </button>
           </section>
@@ -2059,8 +2543,14 @@ export default function Page() {
 
         <section className="sponsored-card">
           <div className="sponsored-head">
-            <h3>Sponsored <span>ⓘ</span></h3>
-            <button type="button" onClick={() => setShowAddProductModal(true)}>
+            <h3>Products</h3>
+            <button
+              type="button"
+              onClick={() => {
+                if (!user) requireAuth('product')
+                else setShowAddProductModal(true)
+              }}
+            >
               <Plus /> Add Product
             </button>
           </div>
@@ -2078,7 +2568,17 @@ export default function Page() {
                   tabIndex={0}
                   title={`Visit ${product.name}`}
                 >
-                  <div className={`product-mark ${product.className}`}>{product.mark}</div>
+                  <div className={`product-mark ${product.className}`}>
+                    {product.logoUrl ? (
+                      <img
+                        src={product.logoUrl}
+                        alt={product.name}
+                        className="product-mark-img"
+                      />
+                    ) : (
+                      product.mark
+                    )}
+                  </div>
                   <div className="product-details">
                     <strong>{product.name}</strong>
                     <p>{product.description}</p>
@@ -2089,11 +2589,14 @@ export default function Page() {
             </div>
           ) : (
             <div className="empty-sponsored-box">
-              <p>No sponsored tools listed yet.</p>
+              <p>No products listed yet.</p>
               <button
                 type="button"
                 className="empty-sponsored-btn"
-                onClick={() => setShowAddProductModal(true)}
+                onClick={() => {
+                  if (!user) requireAuth('product')
+                  else setShowAddProductModal(true)
+                }}
               >
                 <Plus style={{ width: 14, height: 14 }} /> Add Product
               </button>
@@ -2102,18 +2605,27 @@ export default function Page() {
         </section>
       </aside>
 
-      {showPostModal && (
+      {showAuthModal && (
+        <AuthModal
+          onClose={() => setShowAuthModal(false)}
+          onAuthSuccess={handleAuthSuccess}
+          intent={authIntent}
+          initialMode={authInitialMode}
+        />
+      )}
+
+      {showPostModal && user && (
         <PostProblemModal
           onClose={() => setShowPostModal(false)}
           onSubmit={handleSubmit}
           user={user}
-          onAuth={setUser}
         />
       )}
 
       {showAddProductModal && (
         <AddProductModal
           onClose={() => setShowAddProductModal(false)}
+          user={user}
           onSuccess={(msg) => {
             setToastMessage(msg)
             setTimeout(() => setToastMessage(null), 5000)

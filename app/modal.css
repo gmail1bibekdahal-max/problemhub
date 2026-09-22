@@ -234,24 +234,7 @@
 }
 .submit-problem:hover { background: var(--fb-blue-hover); }
 
-.modal-guest {
-  width: 100%;
-  height: 44px;
-  border: 1px solid var(--fb-border);
-  border-radius: var(--fb-radius);
-  background: var(--fb-bg);
-  color: var(--fb-text-primary);
-  font-weight: 600;
-  font-size: 15px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 10px;
-  cursor: pointer;
-  transition: all .15s;
-}
-.modal-guest:hover { background: var(--fb-hover); }
+
 
 .auth-required {
   color: var(--fb-text-tertiary);
@@ -329,8 +312,7 @@
   .modal-google,
   .modal-email,
   .email-continue,
-  .submit-problem,
-  .modal-guest {
+  .submit-problem {
     height: 44px;
     font-size: 14.5px;
   }

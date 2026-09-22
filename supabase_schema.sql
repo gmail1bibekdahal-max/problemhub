@@ -102,62 +102,75 @@ alter table public.problemhub_saved enable row level security;
 alter table public.problemhub_product_requests enable row level security;
 alter table public.problemhub_reactions enable row level security;
 
--- Posts Policies
+-- Posts Policies (Public read-only, Authenticated write)
 drop policy if exists "Public can view posts" on public.problemhub_posts;
 create policy "Public can view posts" on public.problemhub_posts for select using (true);
 
 drop policy if exists "Anyone can insert posts" on public.problemhub_posts;
-create policy "Anyone can insert posts" on public.problemhub_posts for insert with check (true);
+drop policy if exists "Authenticated users can insert posts" on public.problemhub_posts;
+create policy "Authenticated users can insert posts" on public.problemhub_posts for insert with check (auth.uid() is not null and user_id = auth.uid()::text);
 
 drop policy if exists "Anyone can update posts" on public.problemhub_posts;
-create policy "Anyone can update posts" on public.problemhub_posts for update using (true);
+drop policy if exists "Authenticated users can update posts" on public.problemhub_posts;
+create policy "Authenticated users can update posts" on public.problemhub_posts for update using (auth.uid() is not null);
 
--- Comments Policies
+-- Comments Policies (Public read-only, Authenticated write)
 drop policy if exists "Public can view comments" on public.problemhub_comments;
 create policy "Public can view comments" on public.problemhub_comments for select using (true);
 
 drop policy if exists "Anyone can insert comments" on public.problemhub_comments;
-create policy "Anyone can insert comments" on public.problemhub_comments for insert with check (true);
+drop policy if exists "Authenticated users can insert comments" on public.problemhub_comments;
+create policy "Authenticated users can insert comments" on public.problemhub_comments for insert with check (auth.uid() is not null and user_id = auth.uid()::text);
 
 drop policy if exists "Anyone can update comments" on public.problemhub_comments;
-create policy "Anyone can update comments" on public.problemhub_comments for update using (true);
+drop policy if exists "Authenticated users can update comments" on public.problemhub_comments;
+create policy "Authenticated users can update comments" on public.problemhub_comments for update using (auth.uid() is not null);
 
 -- Products Policies
 drop policy if exists "Public can view products" on public.problemhub_products;
 create policy "Public can view products" on public.problemhub_products for select using (true);
 
 drop policy if exists "Anyone can insert products" on public.problemhub_products;
-create policy "Anyone can insert products" on public.problemhub_products for insert with check (true);
+drop policy if exists "Authenticated users can insert products" on public.problemhub_products;
+create policy "Authenticated users can insert products" on public.problemhub_products for insert with check (auth.uid() is not null);
 
--- Saved Posts Policies
+-- Saved Posts Policies (User-isolated bookmarks)
 drop policy if exists "Public can view saved" on public.problemhub_saved;
-create policy "Public can view saved" on public.problemhub_saved for select using (true);
+drop policy if exists "Users can view their own saved" on public.problemhub_saved;
+create policy "Users can view their own saved" on public.problemhub_saved for select using (auth.uid() is not null and user_id = auth.uid()::text);
 
 drop policy if exists "Anyone can insert saved" on public.problemhub_saved;
-create policy "Anyone can insert saved" on public.problemhub_saved for insert with check (true);
+drop policy if exists "Authenticated users can insert saved" on public.problemhub_saved;
+create policy "Authenticated users can insert saved" on public.problemhub_saved for insert with check (auth.uid() is not null and user_id = auth.uid()::text);
 
 drop policy if exists "Anyone can delete saved" on public.problemhub_saved;
-create policy "Anyone can delete saved" on public.problemhub_saved for delete using (true);
+drop policy if exists "Users can delete their own saved" on public.problemhub_saved;
+create policy "Users can delete their own saved" on public.problemhub_saved for delete using (auth.uid() is not null and user_id = auth.uid()::text);
 
 -- Product Requests Policies
 drop policy if exists "Public can view product requests" on public.problemhub_product_requests;
-create policy "Public can view product requests" on public.problemhub_product_requests for select using (true);
+drop policy if exists "Authenticated users can view product requests" on public.problemhub_product_requests;
+create policy "Authenticated users can view product requests" on public.problemhub_product_requests for select using (auth.uid() is not null);
 
 drop policy if exists "Anyone can insert product requests" on public.problemhub_product_requests;
-create policy "Anyone can insert product requests" on public.problemhub_product_requests for insert with check (true);
+drop policy if exists "Authenticated users can insert product requests" on public.problemhub_product_requests;
+create policy "Authenticated users can insert product requests" on public.problemhub_product_requests for insert with check (auth.uid() is not null);
 
 -- Reactions Policies (Problem & Solution Votes)
 drop policy if exists "Public can view reactions" on public.problemhub_reactions;
 create policy "Public can view reactions" on public.problemhub_reactions for select using (true);
 
 drop policy if exists "Anyone can insert reactions" on public.problemhub_reactions;
-create policy "Anyone can insert reactions" on public.problemhub_reactions for insert with check (true);
+drop policy if exists "Authenticated users can insert reactions" on public.problemhub_reactions;
+create policy "Authenticated users can insert reactions" on public.problemhub_reactions for insert with check (auth.uid() is not null and user_id = auth.uid()::text);
 
 drop policy if exists "Anyone can update reactions" on public.problemhub_reactions;
-create policy "Anyone can update reactions" on public.problemhub_reactions for update using (true);
+drop policy if exists "Authenticated users can update reactions" on public.problemhub_reactions;
+create policy "Authenticated users can update reactions" on public.problemhub_reactions for update using (auth.uid() is not null and user_id = auth.uid()::text);
 
 drop policy if exists "Anyone can delete reactions" on public.problemhub_reactions;
-create policy "Anyone can delete reactions" on public.problemhub_reactions for delete using (true);
+drop policy if exists "Authenticated users can delete reactions" on public.problemhub_reactions;
+create policy "Authenticated users can delete reactions" on public.problemhub_reactions for delete using (auth.uid() is not null and user_id = auth.uid()::text);
 
 -- ==============================================================================
 -- Schema Complete & Ready
