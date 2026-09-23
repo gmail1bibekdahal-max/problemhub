@@ -692,12 +692,96 @@ function AuthModal({
   const [password, setPassword] = useState('')
   const [authError, setAuthError] = useState('')
   const [authMessage, setAuthMessage] = useState('')
+  const [googleClientReady, setGoogleClientReady] = useState(false)
+  const googleBtnRef = useRef<HTMLDivElement | null>(null)
 
   function switchAuthMode(mode: 'signup' | 'signin') {
     setAuthMode(mode)
     setAuthError('')
     setAuthMessage('')
   }
+
+  // Client-Side Google Sign-In via Google Identity Services & Supabase signInWithIdToken
+  useEffect(() => {
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+    if (!clientId) return
+
+    let isMounted = true
+
+    const setupGoogle = () => {
+      if (typeof window === 'undefined') return
+      const google = (window as any).google
+
+      if (google?.accounts?.id && googleBtnRef.current) {
+        try {
+          google.accounts.id.initialize({
+            client_id: clientId,
+            callback: async (response: any) => {
+              if (!response?.credential) return
+              setIsLoading(true)
+              setAuthError('')
+              try {
+                const supabase = createClient()
+                const { data, error } = await supabase.auth.signInWithIdToken({
+                  provider: 'google',
+                  token: response.credential,
+                })
+                if (error) {
+                  console.error('[ProblemHub] signInWithIdToken error:', error)
+                  setAuthError(error.message || 'Google sign-in failed. Please try again.')
+                } else if (data?.user) {
+                  onAuthSuccess({ id: data.user.id, email: data.user.email })
+                }
+              } catch (err: any) {
+                console.error('[ProblemHub] Google auth error:', err)
+                setAuthError(err?.message || 'Failed to authenticate with Google.')
+              } finally {
+                setIsLoading(false)
+              }
+            },
+            auto_select: false,
+            cancel_on_tap_outside: true,
+          })
+
+          if (googleBtnRef.current) {
+            googleBtnRef.current.innerHTML = ''
+            const calculatedWidth = Math.min(360, Math.max(260, window.innerWidth - 80))
+            google.accounts.id.renderButton(googleBtnRef.current, {
+              type: 'standard',
+              theme: 'filled_black',
+              size: 'large',
+              text: authMode === 'signup' ? 'signup_with' : 'signin_with',
+              shape: 'rectangular',
+              logo_alignment: 'left',
+              width: calculatedWidth,
+            })
+          }
+
+          if (isMounted) {
+            setGoogleClientReady(true)
+          }
+        } catch (e) {
+          console.warn('[ProblemHub] Google GIS render notice:', e)
+        }
+      }
+    }
+
+    setupGoogle()
+    const checkTimer = setInterval(() => {
+      if ((window as any).google?.accounts?.id && googleBtnRef.current) {
+        setupGoogle()
+        clearInterval(checkTimer)
+      }
+    }, 250)
+
+    const stopTimer = setTimeout(() => clearInterval(checkTimer), 4000)
+
+    return () => {
+      isMounted = false
+      clearInterval(checkTimer)
+      clearTimeout(stopTimer)
+    }
+  }, [authMode, onAuthSuccess])
 
   async function handleGoogleSignUp() {
     setIsLoading(true)
@@ -838,9 +922,14 @@ function AuthModal({
           </button>
         </div>
 
-        <button className="modal-google" onClick={handleGoogleSignUp} disabled={isLoading} type="button">
-          <b>G</b> {authMode === 'signup' ? 'Sign up with Google' : 'Sign in with Google'}
-        </button>
+        <div className="google-btn-wrapper">
+          <div ref={googleBtnRef} className="google-btn-container" />
+          {!googleClientReady && (
+            <button className="modal-google" onClick={handleGoogleSignUp} disabled={isLoading} type="button">
+              <b>G</b> {authMode === 'signup' ? 'Sign up with Google' : 'Sign in with Google'}
+            </button>
+          )}
+        </div>
 
         <div className="modal-divider"><span>or with email</span></div>
 
@@ -1104,7 +1193,7 @@ function AddProductModal({
   user: { id: string; email?: string | null } | null
 }) {
   const [website, setWebsite] = useState('')
-  const [email, setEmail] = useState(user?.email || '')
+  const [email, setEmail] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
@@ -1125,11 +1214,15 @@ function AddProductModal({
       return
     }
 
+    const normalizedWebsite = /^https?:\/\//i.test(cleanWebsite)
+      ? cleanWebsite
+      : `https://${cleanWebsite}`
+
     setIsLoading(true)
     try {
       const supabase = createClient()
       const { error } = await supabase.from('problemhub_product_requests').insert({
-        website: cleanWebsite,
+        website: normalizedWebsite,
         email: cleanEmail,
         status: 'pending',
       })
@@ -1212,7 +1305,7 @@ function AddProductModal({
                 <div className="modal-input-wrap">
                   <Globe className="modal-field-icon" />
                   <input
-                    type="url"
+                    type="text"
                     required
                     value={website}
                     onChange={(e) => setWebsite(e.target.value)}

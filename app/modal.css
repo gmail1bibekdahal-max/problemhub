@@ -102,6 +102,25 @@
   cursor: pointer;
   transition: all 0.15s;
 }
+.google-btn-wrapper {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+}
+.google-btn-container {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+.google-btn-container > div {
+  margin: 0 auto !important;
+}
+.google-btn-container iframe {
+  margin: 0 auto !important;
+}
 .modal-google {
   background: var(--fb-elevated);
   color: var(--fb-text-primary);
