@@ -702,6 +702,9 @@ function GoogleLogoSvg() {
   )
 }
 
+let globalGsiCallback: ((response: any) => void) | null = null
+let isGsiInitialized = false
+
 function AuthModal({
   onClose,
   onAuthSuccess,
@@ -748,6 +751,31 @@ function AuthModal({
     let isCancelled = false
     let pollInterval: NodeJS.Timeout | null = null
 
+    globalGsiCallback = async (response: any) => {
+      if (!response?.credential) return
+      setIsLoading(true)
+      setAuthError('')
+      try {
+        const supabase = createClient()
+        const { data, error } = await supabase.auth.signInWithIdToken({
+          provider: 'google',
+          token: response.credential,
+        })
+        if (error) {
+          console.error('[ProblemHub] signInWithIdToken error:', error)
+          setAuthError(error.message || 'Google sign-in failed. Please try again.')
+        } else if (data?.user) {
+          onAuthSuccessRef.current({ id: data.user.id, email: data.user.email })
+          onCloseRef.current()
+        }
+      } catch (err: any) {
+        console.error('[ProblemHub] Google auth error:', err)
+        setAuthError(err?.message || 'Failed to authenticate with Google.')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
     const renderGSI = () => {
       if (typeof window === 'undefined' || isCancelled) return false
       const google = (window as any).google
@@ -759,35 +787,17 @@ function AuthModal({
         }
 
         try {
-          google.accounts.id.initialize({
-            client_id: GOOGLE_CLIENT_ID,
-            callback: async (response: any) => {
-              if (!response?.credential) return
-              setIsLoading(true)
-              setAuthError('')
-              try {
-                const supabase = createClient()
-                const { data, error } = await supabase.auth.signInWithIdToken({
-                  provider: 'google',
-                  token: response.credential,
-                })
-                if (error) {
-                  console.error('[ProblemHub] signInWithIdToken error:', error)
-                  setAuthError(error.message || 'Google sign-in failed. Please try again.')
-                } else if (data?.user) {
-                  onAuthSuccessRef.current({ id: data.user.id, email: data.user.email })
-                  onCloseRef.current()
-                }
-              } catch (err: any) {
-                console.error('[ProblemHub] Google auth error:', err)
-                setAuthError(err?.message || 'Failed to authenticate with Google.')
-              } finally {
-                setIsLoading(false)
-              }
-            },
-            auto_select: false,
-            cancel_on_tap_outside: true,
-          })
+          if (!isGsiInitialized) {
+            google.accounts.id.initialize({
+              client_id: GOOGLE_CLIENT_ID,
+              callback: (res: any) => {
+                globalGsiCallback?.(res)
+              },
+              auto_select: false,
+              cancel_on_tap_outside: true,
+            })
+            isGsiInitialized = true
+          }
 
           const calculatedWidth = typeof window !== 'undefined'
             ? Math.min(380, Math.max(260, Math.floor(window.innerWidth - 64)))
@@ -830,6 +840,7 @@ function AuthModal({
       isCancelled = true
       if (pollInterval) clearInterval(pollInterval)
       clearTimeout(timeout)
+      globalGsiCallback = null
       if (googleBtnRef.current) {
         googleBtnRef.current.innerHTML = ''
       }
