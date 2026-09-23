@@ -738,15 +738,26 @@ function AuthModal({
     setAuthMessage('')
   }
 
+  const onAuthSuccessRef = useRef(onAuthSuccess)
+  onAuthSuccessRef.current = onAuthSuccess
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
   // Initialize and render Google Identity Services button once with ProblemHub client_id
   useEffect(() => {
     let isCancelled = false
+    let pollInterval: NodeJS.Timeout | null = null
 
     const renderGSI = () => {
       if (typeof window === 'undefined' || isCancelled) return false
       const google = (window as any).google
 
-      if (google?.accounts?.id && googleBtnRef.current && !isGoogleRendered.current) {
+      if (google?.accounts?.id && googleBtnRef.current) {
+        // If already rendered or has any children, do not render again
+        if (isGoogleRendered.current || googleBtnRef.current.children.length > 0) {
+          return true
+        }
+
         try {
           google.accounts.id.initialize({
             client_id: GOOGLE_CLIENT_ID,
@@ -764,8 +775,8 @@ function AuthModal({
                   console.error('[ProblemHub] signInWithIdToken error:', error)
                   setAuthError(error.message || 'Google sign-in failed. Please try again.')
                 } else if (data?.user) {
-                  onAuthSuccess({ id: data.user.id, email: data.user.email })
-                  onClose()
+                  onAuthSuccessRef.current({ id: data.user.id, email: data.user.email })
+                  onCloseRef.current()
                 }
               } catch (err: any) {
                 console.error('[ProblemHub] Google auth error:', err)
@@ -803,23 +814,28 @@ function AuthModal({
     }
 
     if (!renderGSI()) {
-      const interval = setInterval(() => {
-        if (renderGSI()) {
-          clearInterval(interval)
+      pollInterval = setInterval(() => {
+        if (renderGSI() && pollInterval) {
+          clearInterval(pollInterval)
+          pollInterval = null
         }
       }, 80)
-      const timer = setTimeout(() => clearInterval(interval), 3000)
-      return () => {
-        isCancelled = true
-        clearInterval(interval)
-        clearTimeout(timer)
-      }
     }
+
+    const timeout = setTimeout(() => {
+      if (pollInterval) clearInterval(pollInterval)
+    }, 3000)
 
     return () => {
       isCancelled = true
+      if (pollInterval) clearInterval(pollInterval)
+      clearTimeout(timeout)
+      if (googleBtnRef.current) {
+        googleBtnRef.current.innerHTML = ''
+      }
+      isGoogleRendered.current = false
     }
-  }, [onAuthSuccess, onClose])
+  }, [])
 
   async function handleEmailAuth(event?: React.FormEvent) {
     event?.preventDefault()
