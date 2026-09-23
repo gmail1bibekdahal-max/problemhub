@@ -675,6 +675,10 @@ function ProblemCard({
 
 type AuthIntent = 'post' | 'comment' | 'reaction' | 'save' | 'product' | 'general'
 
+const GOOGLE_CLIENT_ID =
+  process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
+  '782156423439-u5kbgl3s8g77p0aq48s2sekulqnqfdhm.apps.googleusercontent.com'
+
 function AuthModal({
   onClose,
   onAuthSuccess,
@@ -703,19 +707,17 @@ function AuthModal({
 
   // Client-Side Google Sign-In via Google Identity Services & Supabase signInWithIdToken
   useEffect(() => {
-    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
-    if (!clientId) return
-
     let isMounted = true
+    let pollInterval: NodeJS.Timeout | null = null
 
-    const setupGoogle = () => {
-      if (typeof window === 'undefined') return
+    const renderGoogleBtn = () => {
+      if (typeof window === 'undefined') return false
       const google = (window as any).google
 
       if (google?.accounts?.id && googleBtnRef.current) {
         try {
           google.accounts.id.initialize({
-            client_id: clientId,
+            client_id: GOOGLE_CLIENT_ID,
             callback: async (response: any) => {
               if (!response?.credential) return
               setIsLoading(true)
@@ -743,47 +745,66 @@ function AuthModal({
             cancel_on_tap_outside: true,
           })
 
-          if (googleBtnRef.current) {
-            googleBtnRef.current.innerHTML = ''
-            const calculatedWidth = Math.min(360, Math.max(260, window.innerWidth - 80))
-            google.accounts.id.renderButton(googleBtnRef.current, {
-              type: 'standard',
-              theme: 'filled_black',
-              size: 'large',
-              text: authMode === 'signup' ? 'signup_with' : 'signin_with',
-              shape: 'rectangular',
-              logo_alignment: 'left',
-              width: calculatedWidth,
-            })
-          }
+          googleBtnRef.current.innerHTML = ''
+          const calculatedWidth = Math.min(360, Math.max(260, window.innerWidth - 80))
+          google.accounts.id.renderButton(googleBtnRef.current, {
+            type: 'standard',
+            theme: 'filled_black',
+            size: 'large',
+            text: authMode === 'signup' ? 'signup_with' : 'signin_with',
+            shape: 'rectangular',
+            logo_alignment: 'left',
+            width: calculatedWidth,
+          })
 
           if (isMounted) {
             setGoogleClientReady(true)
           }
+          return true
         } catch (e) {
           console.warn('[ProblemHub] Google GIS render notice:', e)
         }
       }
+      return false
     }
 
-    setupGoogle()
-    const checkTimer = setInterval(() => {
-      if ((window as any).google?.accounts?.id && googleBtnRef.current) {
-        setupGoogle()
-        clearInterval(checkTimer)
-      }
-    }, 250)
+    if (!renderGoogleBtn()) {
+      pollInterval = setInterval(() => {
+        if (renderGoogleBtn() && pollInterval) {
+          clearInterval(pollInterval)
+        }
+      }, 200)
+    }
 
-    const stopTimer = setTimeout(() => clearInterval(checkTimer), 4000)
+    const timeout = setTimeout(() => {
+      if (pollInterval) clearInterval(pollInterval)
+    }, 4000)
 
     return () => {
       isMounted = false
-      clearInterval(checkTimer)
-      clearTimeout(stopTimer)
+      if (pollInterval) clearInterval(pollInterval)
+      clearTimeout(timeout)
     }
   }, [authMode, onAuthSuccess])
 
   async function handleGoogleSignUp() {
+    setIsLoading(true)
+    setAuthError('')
+    const google = typeof window !== 'undefined' ? (window as any).google : null
+    if (google?.accounts?.id && GOOGLE_CLIENT_ID) {
+      google.accounts.id.prompt((notification: any) => {
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+          doOAuthRedirect()
+        }
+      })
+      setIsLoading(false)
+      return
+    }
+
+    await doOAuthRedirect()
+  }
+
+  async function doOAuthRedirect() {
     setIsLoading(true)
     setAuthError('')
     try {
