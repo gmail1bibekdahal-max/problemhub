@@ -851,6 +851,33 @@ button {
   text-decoration: underline;
 }
 
+.post-narrative-meta {
+  margin: 10px 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+
+.narrative-line {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--fb-text-primary);
+}
+
+.narrative-tag {
+  font-weight: 600;
+  color: var(--fb-text-primary);
+  flex-shrink: 0;
+}
+
+.narrative-content {
+  color: var(--fb-text-secondary);
+}
+
 /* Stats */
 .stats-vertical {
   background: var(--fb-bg);

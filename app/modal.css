@@ -41,6 +41,128 @@
 .post-modal.auth-modal {
   width: min(100%, 450px);
 }
+.post-modal.problem-modal {
+  width: min(100%, 720px);
+  max-height: calc(100vh - 48px);
+  padding: 32px 36px 36px;
+  border-radius: 16px;
+  background: var(--fb-surface, #242526);
+  border: 1px solid var(--fb-border, #3E4042);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+}
+.problem-modal .post-form {
+  gap: 18px;
+}
+.problem-modal .form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 20px;
+}
+.modal-stats-box {
+  background: var(--fb-bg, #18191A);
+  border: 1px solid var(--fb-border, #3E4042);
+  border-radius: 12px;
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.stats-box-heading {
+  font-size: 12.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fb-blue, #2D88FF);
+}
+.form-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.problem-modal label {
+  color: var(--fb-text-primary, #E4E6EB);
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.problem-modal input,
+.problem-modal select,
+.problem-modal textarea {
+  width: 100%;
+  border: 1px solid var(--fb-border, #3E4042);
+  background: var(--fb-bg, #18191A);
+  color: var(--fb-text-primary, #E4E6EB);
+  border-radius: 10px;
+  padding: 11px 14px;
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  box-sizing: border-box;
+}
+.problem-modal input:focus,
+.problem-modal select:focus,
+.problem-modal textarea:focus {
+  border-color: var(--fb-blue, #2D88FF);
+  box-shadow: 0 0 0 3px rgba(45, 136, 255, 0.25);
+}
+.problem-modal select {
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23B0B3B8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 16px;
+  padding-right: 40px;
+}
+.problem-modal select option {
+  background: #242526;
+  color: #E4E6EB;
+  padding: 10px;
+}
+.problem-modal textarea {
+  min-height: 115px;
+  line-height: 1.5;
+  resize: vertical;
+}
+.problem-modal .submit-problem {
+  height: 48px;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 10px;
+  margin-top: 6px;
+}
+.problem-modal .modal-kicker {
+  font-size: 12.5px;
+  letter-spacing: 0.06em;
+}
+.problem-modal h2 {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 4px 0 6px;
+}
+.problem-modal .modal-subtitle {
+  font-size: 14.5px;
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+.problem-modal .looking-tag-group {
+  display: grid;
+  gap: 8px;
+  margin-top: 2px;
+}
+.problem-modal .looking-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.problem-modal .tag-toggle-btn {
+  padding: 8px 15px;
+  font-size: 14px;
+  border-radius: 20px;
+}
 .google-btn-wrapper {
   width: 100%;
   height: 44px;
@@ -341,7 +463,7 @@
   .modal-kicker {
     font-size: 12px;
   }
-  .form-grid-2 {
+  .form-grid-2, .form-grid-3 {
     grid-template-columns: 1fr !important;
     gap: 10px !important;
   }

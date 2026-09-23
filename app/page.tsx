@@ -315,8 +315,26 @@ function ProblemCard({
         </button>
       )}
 
-      {/* Structured Stats Vertical List */}
-      {(problem.frequency || problem.timeWasted || problem.currentSolution || problem.impact) && (
+      {/* Written Current solution and Impact in post after description */}
+      {(problem.currentSolution || problem.impactDetail) && (
+        <div className="post-narrative-meta">
+          {problem.currentSolution && (
+            <p className="narrative-line">
+              <strong className="narrative-tag">Current solution:</strong>{' '}
+              <span className="narrative-content">{problem.currentSolution}</span>
+            </p>
+          )}
+          {problem.impactDetail && (
+            <p className="narrative-line">
+              <strong className="narrative-tag">Impact:</strong>{' '}
+              <span className="narrative-content">{problem.impactDetail}</span>
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Structured Stats Box: Frequency, Time wasted, Impact (choose one) */}
+      {(problem.frequency || problem.timeWasted || problem.impact) && (
         <div className="stats-vertical stats-grid">
           {problem.frequency && (
             <div className="stat-row">
@@ -340,17 +358,6 @@ function ProblemCard({
               </div>
             </div>
           )}
-          {problem.currentSolution && (
-            <div className="stat-row">
-              <div className="stat-icon-wrap">
-                <List />
-              </div>
-              <div className="stat-body">
-                <span className="stat-label">Current solution</span>
-                <strong className="stat-value">{problem.currentSolution}</strong>
-              </div>
-            </div>
-          )}
           {problem.impact && (
             <div className="stat-row">
               <div className="stat-icon-wrap">
@@ -358,10 +365,7 @@ function ProblemCard({
               </div>
               <div className="stat-body">
                 <span className="stat-label">Impact</span>
-                <strong className="stat-value">
-                  {problem.impact}
-                  {problem.impactDetail ? <small>{problem.impactDetail}</small> : null}
-                </strong>
+                <strong className="stat-value">{problem.impact}</strong>
               </div>
             </div>
           )}
@@ -1065,6 +1069,45 @@ function AuthModal({
   )
 }
 
+const FREQUENCY_OPTIONS = [
+  'Daily',
+  'Multiple times a week',
+  'Weekly',
+  'Bi-weekly',
+  'Monthly',
+  'Occasionally',
+]
+
+const TIME_WASTED_OPTIONS = [
+  '< 1 hour / week',
+  '1–3 hours / week',
+  '4–5 hours / week',
+  '5–10 hours / week',
+  '10–20 hours / week',
+  '20+ hours / week',
+]
+
+const CATEGORY_OPTIONS = [
+  'Marketing',
+  'Development',
+  'Operations',
+  'Finance',
+  'Design',
+  'Sales',
+  'AI & Machine Learning',
+  'Product Management',
+  'Customer Support',
+  'DevOps & Cloud',
+  'Other',
+]
+
+const IMPACT_OPTIONS = [
+  'Critical',
+  'High',
+  'Medium',
+  'Low',
+]
+
 function PostProblemModal({
   onClose,
   onSubmit,
@@ -1135,12 +1178,12 @@ function PostProblemModal({
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section className="post-modal" role="dialog" aria-modal="true" aria-label="Share a problem">
+      <section className="post-modal problem-modal" role="dialog" aria-modal="true" aria-label="Share a problem">
         <button className="modal-close" onClick={onClose} aria-label="Close" type="button"><X /></button>
         <form onSubmit={submit} className="post-form">
           <div className="modal-kicker">ProblemHub Community</div>
-          <h2 style={{ margin: '0 0 8px' }}>Share a Problem</h2>
-          <p className="modal-subtitle" style={{ margin: '0 0 14px' }}>
+          <h2>Share a Problem</h2>
+          <p className="modal-subtitle">
             Tell the community what you&apos;re stuck on. Your post will appear in the feed.
           </p>
           
@@ -1150,7 +1193,6 @@ function PostProblemModal({
               required
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              placeholder="e.g. How do I track which marketing campaigns actually generate revenue?"
             />
           </label>
 
@@ -1161,87 +1203,93 @@ function PostProblemModal({
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               rows={4}
-              placeholder="Describe your pain point, manual effort, or why current solutions fall short..."
             />
           </label>
 
-          <div className="form-grid-2">
-            <label>
-              Category
-              <input
-                list="category-suggestions"
-                required
-                value={category}
-                onChange={(event) => setCategory(event.target.value)}
-                placeholder="Select or enter category..."
-              />
-              <datalist id="category-suggestions">
-                <option value="Marketing" />
-                <option value="Development" />
-                <option value="Operations" />
-                <option value="Finance" />
-                <option value="Design" />
-                <option value="Sales" />
-                <option value="AI & Machine Learning" />
-                <option value="Product Management" />
-                <option value="Customer Support" />
-                <option value="DevOps & Cloud" />
-                <option value="Other" />
-              </datalist>
-            </label>
+          <label>
+            Current solution
+            <input
+              required
+              value={currentSolution}
+              onChange={(event) => setCurrentSolution(event.target.value)}
+            />
+          </label>
 
-            <label>
-              Frequency
-              <input
-                required
-                value={frequency}
-                onChange={(event) => setFrequency(event.target.value)}
-                placeholder="e.g. Weekly, Daily, Monthly"
-              />
-            </label>
-          </div>
+          <label>
+            Impact
+            <input
+              value={impactDetail}
+              onChange={(event) => setImpactDetail(event.target.value)}
+            />
+          </label>
 
-          <div className="form-grid-2">
-            <label>
-              Time wasted
-              <input
-                required
-                value={timeWasted}
-                onChange={(event) => setTimeWasted(event.target.value)}
-                placeholder="e.g. 4–5 hours"
-              />
-            </label>
+          <label>
+            Category
+            <select
+              required
+              value={category}
+              onChange={(event) => setCategory(event.target.value)}
+            >
+              <option value="" disabled>Select category</option>
+              {CATEGORY_OPTIONS.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+          </label>
 
-            <label>
-              Current solution
-              <input
-                required
-                value={currentSolution}
-                onChange={(event) => setCurrentSolution(event.target.value)}
-                placeholder="e.g. Excel + manual exports"
-              />
-            </label>
-          </div>
+          <div className="modal-stats-box">
+            <span className="stats-box-heading">Key metrics (choose one for each)</span>
+            <div className="form-grid-3">
+              <label>
+                Frequency
+                <select
+                  required
+                  value={frequency}
+                  onChange={(event) => setFrequency(event.target.value)}
+                >
+                  <option value="" disabled>Select frequency</option>
+                  {FREQUENCY_OPTIONS.map((freq) => (
+                    <option key={freq} value={freq}>
+                      {freq}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-          <div className="form-grid-2">
-            <label>
-              Impact
-              <input
-                required
-                value={impact}
-                onChange={(event) => setImpact(event.target.value)}
-                placeholder="e.g. High, Critical, Medium"
-              />
-            </label>
+              <label>
+                Time wasted
+                <select
+                  required
+                  value={timeWasted}
+                  onChange={(event) => setTimeWasted(event.target.value)}
+                >
+                  <option value="" disabled>Select time wasted</option>
+                  {TIME_WASTED_OPTIONS.map((time) => (
+                    <option key={time} value={time}>
+                      {time}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-            <label>
-              Impact detail (optional)
-              <input
-                value={impactDetail}
-                onChange={(event) => setImpactDetail(event.target.value)}
-                placeholder="e.g. (time + accuracy)"
-              />
-            </label>
+              <label>
+                Impact
+                <select
+                  required
+                  value={impact}
+                  onChange={(event) => setImpact(event.target.value)}
+                >
+                  <option value="" disabled>Select impact</option>
+                  {IMPACT_OPTIONS.map((imp) => (
+                    <option key={imp} value={imp}>
+                      {imp}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
           </div>
 
           <div className="looking-tag-group">
@@ -1853,7 +1901,7 @@ export default function Page() {
                     text: c.comment_text,
                     time: formatRelativeTime(c.created_at),
                     likes: c.likes_count || 0,
-                    liked: userLikedComments.has(c.id),
+                    liked: false,
                     parentId: c.parent_id || null,
                   }))
 
@@ -1877,8 +1925,8 @@ export default function Page() {
                     people: singlePost.people_count || 1,
                     problemVotes: singlePost.problem_votes ?? 0,
                     solutionVotes: singlePost.solution_votes ?? 0,
-                    userVotedProblem: userProblemReactions.has(singlePost.id),
-                    userVotedSolution: userSolutionReactions.has(singlePost.id),
+                    userVotedProblem: userReactionsSet.has(`${singlePost.id}:problem`),
+                    userVotedSolution: userReactionsSet.has(`${singlePost.id}:solution`),
                     accent: singlePost.author_accent || 'avatar-blue',
                     saved: savedSet.has(singlePost.id),
                     commentsList: formattedComments,
