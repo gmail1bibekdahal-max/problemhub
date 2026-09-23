@@ -679,6 +679,29 @@ const GOOGLE_CLIENT_ID =
   process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
   '782156423439-u5kbgl3s8g77p0aq48s2sekulqnqfdhm.apps.googleusercontent.com'
 
+function GoogleLogoSvg() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <path
+        fill="#4285F4"
+        d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3.03h3.88c2.27-2.09 3.665-5.17 3.665-9.12z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.03c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.26v3.13C3.25 21.37 7.31 24 12 24z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.28 14.29c-.25-.72-.38-1.49-.38-2.29s.13-1.57.38-2.29V6.57H1.26C.46 8.16 0 9.98 0 12s.46 3.84 1.26 5.43l4.02-3.14z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.25 2.63 1.26 6.57l4.02 3.14c.95-2.83 3.6-4.96 6.72-4.96z"
+      />
+    </svg>
+  )
+}
+
 function AuthModal({
   onClose,
   onAuthSuccess,
@@ -696,8 +719,16 @@ function AuthModal({
   const [password, setPassword] = useState('')
   const [authError, setAuthError] = useState('')
   const [authMessage, setAuthMessage] = useState('')
-  const [googleClientReady, setGoogleClientReady] = useState(false)
-  const googleBtnRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
 
   function switchAuthMode(mode: 'signup' | 'signin') {
     setAuthMode(mode)
@@ -705,119 +736,80 @@ function AuthModal({
     setAuthMessage('')
   }
 
-  // Client-Side Google Sign-In via Google Identity Services & Supabase signInWithIdToken
-  useEffect(() => {
-    let isMounted = true
-    let pollInterval: NodeJS.Timeout | null = null
-
-    const renderGoogleBtn = () => {
-      if (typeof window === 'undefined') return false
-      const google = (window as any).google
-
-      if (google?.accounts?.id && googleBtnRef.current) {
-        try {
-          google.accounts.id.initialize({
-            client_id: GOOGLE_CLIENT_ID,
-            callback: async (response: any) => {
-              if (!response?.credential) return
-              setIsLoading(true)
-              setAuthError('')
-              try {
-                const supabase = createClient()
-                const { data, error } = await supabase.auth.signInWithIdToken({
-                  provider: 'google',
-                  token: response.credential,
-                })
-                if (error) {
-                  console.error('[ProblemHub] signInWithIdToken error:', error)
-                  setAuthError(error.message || 'Google sign-in failed. Please try again.')
-                } else if (data?.user) {
-                  onAuthSuccess({ id: data.user.id, email: data.user.email })
-                }
-              } catch (err: any) {
-                console.error('[ProblemHub] Google auth error:', err)
-                setAuthError(err?.message || 'Failed to authenticate with Google.')
-              } finally {
-                setIsLoading(false)
-              }
-            },
-            auto_select: false,
-            cancel_on_tap_outside: true,
-          })
-
-          googleBtnRef.current.innerHTML = ''
-          const calculatedWidth = Math.min(380, Math.max(280, window.innerWidth - 60))
-          google.accounts.id.renderButton(googleBtnRef.current, {
-            type: 'standard',
-            theme: 'filled_black',
-            size: 'large',
-            text: authMode === 'signup' ? 'signup_with' : 'signin_with',
-            shape: 'rectangular',
-            logo_alignment: 'left',
-            width: calculatedWidth,
-          })
-
-          if (isMounted) {
-            setGoogleClientReady(true)
-          }
-          return true
-        } catch (e) {
-          console.warn('[ProblemHub] Google GIS render notice:', e)
-        }
-      }
-      return false
-    }
-
-    if (!renderGoogleBtn()) {
-      pollInterval = setInterval(() => {
-        if (renderGoogleBtn() && pollInterval) {
-          clearInterval(pollInterval)
-        }
-      }, 200)
-    }
-
-    const timeout = setTimeout(() => {
-      if (pollInterval) clearInterval(pollInterval)
-    }, 4000)
-
-    return () => {
-      isMounted = false
-      if (pollInterval) clearInterval(pollInterval)
-      clearTimeout(timeout)
-    }
-  }, [authMode, onAuthSuccess])
-
-  async function handleGoogleSignUp() {
+  async function handleGoogleAuth() {
     setIsLoading(true)
     setAuthError('')
+    setAuthMessage('')
+
     const google = typeof window !== 'undefined' ? (window as any).google : null
-    if (google?.accounts?.id && GOOGLE_CLIENT_ID) {
-      google.accounts.id.prompt((notification: any) => {
-        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          doOAuthRedirect()
-        }
-      })
-      setIsLoading(false)
-      return
+    const clientId = GOOGLE_CLIENT_ID
+
+    if (google?.accounts?.id && clientId) {
+      try {
+        google.accounts.id.initialize({
+          client_id: clientId,
+          callback: async (response: any) => {
+            if (!response?.credential) return
+            setIsLoading(true)
+            setAuthError('')
+            try {
+              const supabase = createClient()
+              const { data, error } = await supabase.auth.signInWithIdToken({
+                provider: 'google',
+                token: response.credential,
+              })
+              if (error) {
+                console.error('[ProblemHub] signInWithIdToken error:', error)
+                setAuthError(error.message || 'Google sign-in failed. Please try again.')
+              } else if (data?.user) {
+                onAuthSuccess({ id: data.user.id, email: data.user.email })
+              }
+            } catch (err: any) {
+              console.error('[ProblemHub] Google auth error:', err)
+              setAuthError(err?.message || 'Failed to authenticate with Google.')
+            } finally {
+              setIsLoading(false)
+            }
+          },
+          auto_select: false,
+          cancel_on_tap_outside: true,
+        })
+
+        let fallbackTriggered = false
+        google.accounts.id.prompt((notification: any) => {
+          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+            if (!fallbackTriggered) {
+              fallbackTriggered = true
+              triggerOAuth()
+            }
+          }
+        })
+        setIsLoading(false)
+        return
+      } catch (err) {
+        console.warn('[ProblemHub] GIS prompt error, falling back to OAuth:', err)
+      }
     }
 
-    await doOAuthRedirect()
+    await triggerOAuth()
   }
 
-  async function doOAuthRedirect() {
+  async function triggerOAuth() {
     setIsLoading(true)
     setAuthError('')
     try {
       const supabase = createClient()
-      const redirectUrl = process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ?? `${window.location.origin}/auth/callback`
+      const redirectUrl =
+        process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ??
+        `${window.location.origin}/auth/callback`
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo: redirectUrl },
       })
       if (error) throw error
     } catch (err: any) {
-      console.log('[ProblemHub] OAuth error:', err)
-      setAuthError('Google sign-in is not enabled in your Supabase project. Please sign in with Email.')
+      console.error('[ProblemHub] OAuth error:', err)
+      setAuthError('Google sign-in could not be completed. Please use Email or try again.')
     } finally {
       setIsLoading(false)
     }
@@ -839,14 +831,18 @@ function AuthModal({
           email: email.trim(),
           password,
           options: {
-            emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ?? `${window.location.origin}/auth/callback`,
+            emailRedirectTo:
+              process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ??
+              `${window.location.origin}/auth/callback`,
           },
         })
         if (error) throw error
         if (data.session && data.user) {
           onAuthSuccess({ id: data.user.id, email: data.user.email })
         } else {
-          setAuthMessage('Account created! Please check your email inbox to verify your account, then sign in.')
+          setAuthMessage(
+            'Account created! Please check your email inbox to verify your account, then sign in.'
+          )
         }
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -863,7 +859,10 @@ function AuthModal({
     } catch (err: any) {
       console.log('[ProblemHub] Email auth error:', err)
       const message = err instanceof Error ? err.message.toLowerCase() : ''
-      if (message.includes('invalid login credentials') || message.includes('invalid email or password')) {
+      if (
+        message.includes('invalid login credentials') ||
+        message.includes('invalid email or password')
+      ) {
         setAuthError('Invalid email or password.')
       } else if (message.includes('email not confirmed')) {
         setAuthError('Please confirm your email address before signing in.')
@@ -882,46 +881,78 @@ function AuthModal({
       case 'post':
         return {
           kicker: 'ProblemHub Community',
-          title: 'Sign in to Share a Problem',
-          subtitle: 'Tell the community what you\'re stuck on to get advice, find existing tools, or collaborate on solutions.',
+          title:
+            authMode === 'signup'
+              ? 'Create Account to Share a Problem'
+              : 'Sign in to Share a Problem',
+          subtitle:
+            'Tell the community what you’re stuck on to get advice, find existing tools, or collaborate on solutions.',
         }
       case 'comment':
         return {
           kicker: 'Join the Discussion',
-          title: 'Sign in to Comment & Reply',
-          subtitle: 'Share your thoughts, advice, or reply to community members solving real challenges.',
+          title:
+            authMode === 'signup'
+              ? 'Create Account to Comment & Reply'
+              : 'Sign in to Comment & Reply',
+          subtitle:
+            'Share your thoughts, advice, or reply to community members solving real challenges.',
         }
       case 'reaction':
         return {
           kicker: 'Community Feedback',
-          title: 'Sign in to Vote',
-          subtitle: 'Vote whether you experience this problem or want to build/propose a solution.',
+          title: authMode === 'signup' ? 'Create Account to Vote' : 'Sign in to Vote',
+          subtitle:
+            'Vote whether you experience this problem or want to build/propose a solution.',
         }
       case 'save':
         return {
           kicker: 'Personal Bookmarks',
-          title: 'Sign in to Bookmark Problems',
-          subtitle: 'Save this problem to your personal collection to track discussions and progress.',
+          title:
+            authMode === 'signup'
+              ? 'Create Account to Bookmark'
+              : 'Sign in to Bookmark Problems',
+          subtitle:
+            'Save this problem to your personal collection to track discussions and progress.',
         }
       case 'product':
         return {
-          kicker: 'Showcase & Sponsor',
-          title: 'Sign in to Submit Product',
-          subtitle: 'Reach thousands of active professionals and builders solving real problems.',
+          kicker: 'Showcase & Products',
+          title:
+            authMode === 'signup'
+              ? 'Create Account to Add Product'
+              : 'Sign in to Submit Product',
+          subtitle:
+            'Reach thousands of active professionals and builders solving real problems.',
         }
       default:
         return {
-          kicker: 'Welcome to ProblemHub',
-          title: 'Sign in to ProblemHub',
-          subtitle: 'Discover opportunities, share real challenges, and build better solutions together.',
+          kicker: authMode === 'signup' ? 'Create an Account' : 'Welcome to ProblemHub',
+          title: authMode === 'signup' ? 'Sign up for ProblemHub' : 'Sign in to ProblemHub',
+          subtitle:
+            'Discover opportunities, share real challenges, and build better solutions together.',
         }
     }
-  }, [intent])
+  }, [intent, authMode])
 
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section className="post-modal" role="dialog" aria-modal="true" aria-label={intentDetails.title}>
-        <button className="modal-close" onClick={onClose} aria-label="Close" type="button"><X /></button>
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
+    >
+      <section
+        className="post-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={intentDetails.title}
+      >
+        <button className="modal-close" onClick={onClose} aria-label="Close" type="button">
+          <X />
+        </button>
+
         <div className="modal-kicker">{intentDetails.kicker}</div>
         <h2>{intentDetails.title}</h2>
         <p className="modal-subtitle">{intentDetails.subtitle}</p>
@@ -943,16 +974,19 @@ function AuthModal({
           </button>
         </div>
 
-        <div className="google-btn-wrapper">
-          <div ref={googleBtnRef} className="google-btn-container" />
-          {!googleClientReady && (
-            <button className="modal-google" onClick={handleGoogleSignUp} disabled={isLoading} type="button">
-              <b>G</b> {authMode === 'signup' ? 'Sign up with Google' : 'Sign in with Google'}
-            </button>
-          )}
-        </div>
+        <button
+          type="button"
+          className="modal-google"
+          onClick={handleGoogleAuth}
+          disabled={isLoading}
+        >
+          <GoogleLogoSvg />
+          <span>{authMode === 'signup' ? 'Sign up with Google' : 'Sign in with Google'}</span>
+        </button>
 
-        <div className="modal-divider"><span>or with email</span></div>
+        <div className="modal-divider">
+          <span>or with email</span>
+        </div>
 
         <form onSubmit={handleEmailAuth} className="email-fields">
           <input
@@ -966,7 +1000,9 @@ function AuthModal({
           />
           <input
             type="password"
-            placeholder={authMode === 'signup' ? 'Password (min. 6 characters)' : 'Password'}
+            placeholder={
+              authMode === 'signup' ? 'Password (min. 6 characters)' : 'Password'
+            }
             aria-label="Password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
@@ -983,13 +1019,19 @@ function AuthModal({
           </button>
         </form>
 
-        {authError && <p className="auth-error" role="alert">{authError}</p>}
-        {authMessage && <p className="auth-message" role="status">{authMessage}</p>}
+        {authError && (
+          <p className="auth-error" role="alert">
+            {authError}
+          </p>
+        )}
+        {authMessage && (
+          <p className="auth-message" role="status">
+            {authMessage}
+          </p>
+        )}
 
         <p className="auth-required">
-          {authMode === 'signup'
-            ? 'Sign up to post problems, comment, vote, and bookmark. Without login, the site is read-only.'
-            : 'Sign in to your account. Without login, ProblemHub is read-only.'}
+          Sign in or create an account to post, vote, and comment. Without login, ProblemHub is read-only.
         </p>
       </section>
     </div>
@@ -2465,7 +2507,8 @@ export default function Page() {
             </div>
             <div className="signup-stack">
               <button type="button" className="google-button" onClick={() => requireAuth('general', 'signup')}>
-                <b>G</b>Sign up with Google
+                <GoogleLogoSvg />
+                <span>Sign up with Google</span>
               </button>
               <button type="button" className="email-button" onClick={() => requireAuth('general', 'signup')}>
                 <MessageCircle /> Sign up with Email
@@ -2719,7 +2762,7 @@ export default function Page() {
         </section>
       </aside>
 
-      {showAuthModal && (
+      {showAuthModal && !user && (
         <AuthModal
           onClose={() => setShowAuthModal(false)}
           onAuthSuccess={handleAuthSuccess}

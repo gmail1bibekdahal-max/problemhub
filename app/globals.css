@@ -277,6 +277,12 @@ button {
   font-size: 18px;
 }
 
+.google-button svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
 .email-button {
   background: var(--fb-blue);
   color: #fff;

@@ -1,4 +1,20 @@
 /* ===== Facebook Dark Mode Modals ===== */
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modalSlideUp {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -8,6 +24,7 @@
   place-items: center;
   padding: 20px;
   backdrop-filter: blur(6px);
+  animation: modalFadeIn 0.15s ease-out;
 }
 .post-modal {
   position: relative;
@@ -19,6 +36,7 @@
   background: var(--fb-white);
   padding: 24px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+  animation: modalSlideUp 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .post-modal::-webkit-scrollbar { width: 6px; }
 .post-modal::-webkit-scrollbar-track { background: var(--fb-bg); border-radius: 3px; }
@@ -68,7 +86,7 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 .modal-auth button {
   border: 1px solid var(--fb-border);
@@ -102,41 +120,13 @@
   cursor: pointer;
   transition: all 0.15s;
 }
-.google-btn-wrapper {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 44px;
-  color-scheme: light !important;
-}
-.google-btn-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 100%;
-  color-scheme: light !important;
-}
-.google-btn-container > div {
-  margin: 0 auto !important;
-  background: transparent !important;
-  border-radius: var(--fb-radius) !important;
-  overflow: hidden !important;
-}
-.google-btn-container iframe {
-  margin: 0 auto !important;
-  background: transparent !important;
-  color-scheme: light !important;
-  border-radius: var(--fb-radius) !important;
-}
 .modal-google {
   background: var(--fb-elevated);
   color: var(--fb-text-primary);
   border: 1px solid var(--fb-border);
 }
 .modal-google:hover { background: #4E4F50; }
-.modal-google b { font-size: 18px; color: var(--fb-blue); }
+.modal-google svg { width: 18px; height: 18px; flex-shrink: 0; }
 .modal-google:disabled, .email-continue:disabled, .submit-problem:disabled {
   opacity: 0.5;
   cursor: wait;
@@ -268,7 +258,11 @@
   color: var(--fb-text-tertiary);
   font-size: 13px;
   text-align: center;
-  margin-top: 8px;
+  margin-top: 10px;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .auth-error, .auth-message { font-size: 13px; line-height: 1.4; margin: 0; }
 .auth-error { color: #F02849; }
