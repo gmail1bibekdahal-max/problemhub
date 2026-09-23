@@ -109,17 +109,26 @@
   align-items: center;
   justify-content: center;
   min-height: 44px;
+  color-scheme: light !important;
 }
 .google-btn-container {
   display: flex;
   justify-content: center;
+  align-items: center;
   width: 100%;
+  color-scheme: light !important;
 }
 .google-btn-container > div {
   margin: 0 auto !important;
+  background: transparent !important;
+  border-radius: var(--fb-radius) !important;
+  overflow: hidden !important;
 }
 .google-btn-container iframe {
   margin: 0 auto !important;
+  background: transparent !important;
+  color-scheme: light !important;
+  border-radius: var(--fb-radius) !important;
 }
 .modal-google {
   background: var(--fb-elevated);

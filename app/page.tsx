@@ -746,7 +746,7 @@ function AuthModal({
           })
 
           googleBtnRef.current.innerHTML = ''
-          const calculatedWidth = Math.min(360, Math.max(260, window.innerWidth - 80))
+          const calculatedWidth = Math.min(380, Math.max(280, window.innerWidth - 60))
           google.accounts.id.renderButton(googleBtnRef.current, {
             type: 'standard',
             theme: 'filled_black',
