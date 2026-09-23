@@ -719,6 +719,8 @@ function AuthModal({
   const [password, setPassword] = useState('')
   const [authError, setAuthError] = useState('')
   const [authMessage, setAuthMessage] = useState('')
+  const googleBtnRef = useRef<HTMLDivElement | null>(null)
+  const isGoogleRendered = useRef(false)
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -736,84 +738,88 @@ function AuthModal({
     setAuthMessage('')
   }
 
-  async function handleGoogleAuth() {
-    setIsLoading(true)
-    setAuthError('')
-    setAuthMessage('')
+  // Initialize and render Google Identity Services button once with ProblemHub client_id
+  useEffect(() => {
+    let isCancelled = false
 
-    const google = typeof window !== 'undefined' ? (window as any).google : null
-    const clientId = GOOGLE_CLIENT_ID
+    const renderGSI = () => {
+      if (typeof window === 'undefined' || isCancelled) return false
+      const google = (window as any).google
 
-    if (google?.accounts?.id && clientId) {
-      try {
-        google.accounts.id.initialize({
-          client_id: clientId,
-          callback: async (response: any) => {
-            if (!response?.credential) return
-            setIsLoading(true)
-            setAuthError('')
-            try {
-              const supabase = createClient()
-              const { data, error } = await supabase.auth.signInWithIdToken({
-                provider: 'google',
-                token: response.credential,
-              })
-              if (error) {
-                console.error('[ProblemHub] signInWithIdToken error:', error)
-                setAuthError(error.message || 'Google sign-in failed. Please try again.')
-              } else if (data?.user) {
-                onAuthSuccess({ id: data.user.id, email: data.user.email })
+      if (google?.accounts?.id && googleBtnRef.current && !isGoogleRendered.current) {
+        try {
+          google.accounts.id.initialize({
+            client_id: GOOGLE_CLIENT_ID,
+            callback: async (response: any) => {
+              if (!response?.credential) return
+              setIsLoading(true)
+              setAuthError('')
+              try {
+                const supabase = createClient()
+                const { data, error } = await supabase.auth.signInWithIdToken({
+                  provider: 'google',
+                  token: response.credential,
+                })
+                if (error) {
+                  console.error('[ProblemHub] signInWithIdToken error:', error)
+                  setAuthError(error.message || 'Google sign-in failed. Please try again.')
+                } else if (data?.user) {
+                  onAuthSuccess({ id: data.user.id, email: data.user.email })
+                  onClose()
+                }
+              } catch (err: any) {
+                console.error('[ProblemHub] Google auth error:', err)
+                setAuthError(err?.message || 'Failed to authenticate with Google.')
+              } finally {
+                setIsLoading(false)
               }
-            } catch (err: any) {
-              console.error('[ProblemHub] Google auth error:', err)
-              setAuthError(err?.message || 'Failed to authenticate with Google.')
-            } finally {
-              setIsLoading(false)
-            }
-          },
-          auto_select: false,
-          cancel_on_tap_outside: true,
-        })
+            },
+            auto_select: false,
+            cancel_on_tap_outside: true,
+          })
 
-        let fallbackTriggered = false
-        google.accounts.id.prompt((notification: any) => {
-          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-            if (!fallbackTriggered) {
-              fallbackTriggered = true
-              triggerOAuth()
-            }
-          }
-        })
-        setIsLoading(false)
-        return
-      } catch (err) {
-        console.warn('[ProblemHub] GIS prompt error, falling back to OAuth:', err)
+          const calculatedWidth = typeof window !== 'undefined'
+            ? Math.min(380, Math.max(260, Math.floor(window.innerWidth - 64)))
+            : 380
+
+          googleBtnRef.current.innerHTML = ''
+          google.accounts.id.renderButton(googleBtnRef.current, {
+            type: 'standard',
+            theme: 'filled_black',
+            size: 'large',
+            text: 'continue_with',
+            shape: 'rectangular',
+            logo_alignment: 'left',
+            width: calculatedWidth,
+          })
+
+          isGoogleRendered.current = true
+          return true
+        } catch (e) {
+          console.warn('[ProblemHub] Google GIS render notice:', e)
+        }
+      }
+      return false
+    }
+
+    if (!renderGSI()) {
+      const interval = setInterval(() => {
+        if (renderGSI()) {
+          clearInterval(interval)
+        }
+      }, 80)
+      const timer = setTimeout(() => clearInterval(interval), 3000)
+      return () => {
+        isCancelled = true
+        clearInterval(interval)
+        clearTimeout(timer)
       }
     }
 
-    await triggerOAuth()
-  }
-
-  async function triggerOAuth() {
-    setIsLoading(true)
-    setAuthError('')
-    try {
-      const supabase = createClient()
-      const redirectUrl =
-        process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ??
-        `${window.location.origin}/auth/callback`
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo: redirectUrl },
-      })
-      if (error) throw error
-    } catch (err: any) {
-      console.error('[ProblemHub] OAuth error:', err)
-      setAuthError('Google sign-in could not be completed. Please use Email or try again.')
-    } finally {
-      setIsLoading(false)
+    return () => {
+      isCancelled = true
     }
-  }
+  }, [onAuthSuccess, onClose])
 
   async function handleEmailAuth(event?: React.FormEvent) {
     event?.preventDefault()
@@ -944,7 +950,7 @@ function AuthModal({
       }}
     >
       <section
-        className="post-modal"
+        className="post-modal auth-modal"
         role="dialog"
         aria-modal="true"
         aria-label={intentDetails.title}
@@ -974,15 +980,9 @@ function AuthModal({
           </button>
         </div>
 
-        <button
-          type="button"
-          className="modal-google"
-          onClick={handleGoogleAuth}
-          disabled={isLoading}
-        >
-          <GoogleLogoSvg />
-          <span>{authMode === 'signup' ? 'Sign up with Google' : 'Sign in with Google'}</span>
-        </button>
+        <div className="google-btn-wrapper">
+          <div ref={googleBtnRef} className="google-btn-container" />
+        </div>
 
         <div className="modal-divider">
           <span>or with email</span>

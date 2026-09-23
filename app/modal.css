@@ -38,6 +38,31 @@
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
   animation: modalSlideUp 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
+.post-modal.auth-modal {
+  width: min(100%, 450px);
+}
+.google-btn-wrapper {
+  width: 100%;
+  height: 44px;
+  min-height: 44px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 6px 0 12px;
+}
+.google-btn-container {
+  height: 44px;
+  min-height: 44px;
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.google-btn-container iframe {
+  color-scheme: light !important;
+  border-radius: var(--fb-radius) !important;
+}
 .post-modal::-webkit-scrollbar { width: 6px; }
 .post-modal::-webkit-scrollbar-track { background: var(--fb-bg); border-radius: 3px; }
 .post-modal::-webkit-scrollbar-thumb { background: var(--fb-elevated); border-radius: 3px; }
